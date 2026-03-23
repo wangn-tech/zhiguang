@@ -28,5 +28,14 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+# AI Coding
+AGENTS.md
+docs/
+.agents/
+skills-lock.json
+
+# infra
+deploy/
