@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,14 @@ func TestHealthz_OK(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
+
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("status field = %v, want ok", body["status"])
+	}
 }
 
 func TestReadyz_OK(t *testing.T) {
@@ -51,6 +60,14 @@ func TestReadyz_OK(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if body["status"] != "ready" {
+		t.Fatalf("status field = %v, want ready", body["status"])
 	}
 }
 
@@ -71,4 +88,27 @@ func TestReadyz_Unavailable(t *testing.T) {
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", w.Code)
 	}
+
+	resp := decodeResponse(t, w.Body.Bytes())
+	if resp.Code != "INTERNAL_ERROR" {
+		t.Fatalf("code = %s, want INTERNAL_ERROR", resp.Code)
+	}
+	if resp.Message != "依赖未就绪" {
+		t.Fatalf("message = %s, want 依赖未就绪", resp.Message)
+	}
+}
+
+type testResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func decodeResponse(t *testing.T, raw []byte) testResponse {
+	t.Helper()
+
+	var resp testResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	return resp
 }

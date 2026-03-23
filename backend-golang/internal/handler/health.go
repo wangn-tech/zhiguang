@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"time"
+	"zhiguang/pkg/errorsx"
 
 	"github.com/gin-gonic/gin"
 )
@@ -31,9 +32,7 @@ func (h *HealthHandler) Register(r gin.IRouter) {
 }
 
 func (h *HealthHandler) healthz(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"status": "ok",
-	})
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (h *HealthHandler) readyz(c *gin.Context) {
@@ -42,16 +41,13 @@ func (h *HealthHandler) readyz(c *gin.Context) {
 
 	for _, checker := range h.checkers {
 		if err := checker.Check(ctx); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":     "not_ready",
-				"dependency": checker.Name(),
-				"error":      err.Error(),
+			c.JSON(http.StatusServiceUnavailable, errorsx.ErrorResponse{
+				Code:    string(errorsx.CodeInternalError),
+				Message: "依赖未就绪",
 			})
 			return
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "ready",
-	})
+	c.JSON(http.StatusOK, gin.H{"status": "ready"})
 }

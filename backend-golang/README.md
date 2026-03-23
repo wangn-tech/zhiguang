@@ -11,6 +11,11 @@
 ## 默认配置文件
 - 路径：`configs/config.yaml`
 
+## API 响应约定（与 backend-java 对齐）
+- 成功响应：返回业务 DTO（不额外包裹 `code/data`）。
+- 失败响应：统一返回 JSON `{ "code": "...", "message": "..." }`。
+- 通用错误处理：由 Gin 全局异常处理中间件统一处理 panic 与链路错误。
+
 ## 常用启动命令
 1. 先启动依赖（MySQL + Redis）：
    - `docker compose --env-file ../deploy/docker/.env -f ../deploy/docker/docker-compose.yaml --profile core up -d`
