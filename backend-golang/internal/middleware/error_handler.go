@@ -34,7 +34,12 @@ func ErrorHandler() gin.HandlerFunc {
 			return
 		}
 
-		status, body := errorsx.Normalize(c.Errors.Last().Err)
+		last := c.Errors.Last()
+		if last == nil || last.Err == nil {
+			return
+		}
+
+		status, body := errorsx.Normalize(last.Err)
 		c.AbortWithStatusJSON(status, body)
 	}
 }
