@@ -1,0 +1,6 @@
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/G-Pegasus/zhiguang_fe.git
+[submodule "backend-java"]
+	path = backend-java
+	url = https://github.com/G-Pegasus/zhiguang_be.git
