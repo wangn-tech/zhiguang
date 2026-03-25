@@ -51,6 +51,7 @@ func NewEngine(
 	if knowPostHandler != nil {
 		knowposts := r.Group("/api/v1/knowposts")
 		knowposts.POST("/drafts", knowPostHandler.CreateDraft)
+		knowposts.POST("/:id/content/confirm", knowPostHandler.ConfirmContent)
 	}
 
 	return r

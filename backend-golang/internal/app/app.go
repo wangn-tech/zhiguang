@@ -34,7 +34,7 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	profileService := service.NewProfileService(userRepo)
 	objectStorageService := service.NewObjectStorageService(cfg.OSS)
 	storagePresignService := service.NewStoragePresignService(objectStorageService, knowPostRepo, cfg.OSS.PresignExpireSeconds)
-	knowPostService := service.NewKnowPostService(knowPostRepo)
+	knowPostService := service.NewKnowPostService(knowPostRepo, cfg.OSS)
 
 	healthHandler := handler.NewHealthHandler([]handler.Checker{
 		store.NewMySQLChecker(db),

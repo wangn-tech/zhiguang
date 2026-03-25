@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,9 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 	"zhiguang/internal/middleware"
-
-	"github.com/gin-gonic/gin"
+	"zhiguang/internal/service"
 )
+
+import "github.com/gin-gonic/gin"
 
 func TestKnowPostHandler_CreateDraft_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -64,6 +66,59 @@ func TestKnowPostHandler_CreateDraft_ServiceError(t *testing.T) {
 	}
 }
 
+func TestKnowPostHandler_ConfirmContent_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/knowposts/:id/content/confirm", h.ConfirmContent)
+
+	body := map[string]any{
+		"objectKey": "posts/1/content.md",
+		"etag":      "abc123",
+		"size":      12,
+		"sha256":    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/knowposts/1/content/confirm", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestKnowPostHandler_ConfirmContent_InvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/knowposts/:id/content/confirm", h.ConfirmContent)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/knowposts/abc/content/confirm", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 type fakeKnowPostService struct {
 	draftID uint64
 	err     error
@@ -74,4 +129,8 @@ func (s *fakeKnowPostService) CreateDraft(_ context.Context, _ uint64) (uint64, 
 		return 0, s.err
 	}
 	return s.draftID, nil
+}
+
+func (s *fakeKnowPostService) ConfirmContent(_ context.Context, _ uint64, _ uint64, _ service.KnowPostContentConfirmRequest) error {
+	return s.err
 }

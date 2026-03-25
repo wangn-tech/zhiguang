@@ -125,6 +125,7 @@ func defaultAuthzPolicies() []AuthzPolicy {
 		{Subject: authzSubjectUser, Path: "/api/v1/profile/avatar", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/storage/presign", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/drafts", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/content/confirm", Method: "POST"},
 	}
 }
 
