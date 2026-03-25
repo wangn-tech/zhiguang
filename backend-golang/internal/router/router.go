@@ -13,6 +13,7 @@ func NewEngine(
 	authHandler *handler.AuthHandler,
 	profileHandler *handler.ProfileHandler,
 	storageHandler *handler.StorageHandler,
+	knowPostHandler *handler.KnowPostHandler,
 	authz gin.HandlerFunc,
 ) *gin.Engine {
 	r := gin.New()
@@ -45,6 +46,11 @@ func NewEngine(
 	if storageHandler != nil {
 		storage := r.Group("/api/v1/storage")
 		storage.POST("/presign", storageHandler.Presign)
+	}
+
+	if knowPostHandler != nil {
+		knowposts := r.Group("/api/v1/knowposts")
+		knowposts.POST("/drafts", knowPostHandler.CreateDraft)
 	}
 
 	return r

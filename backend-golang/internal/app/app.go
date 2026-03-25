@@ -34,6 +34,7 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	profileService := service.NewProfileService(userRepo)
 	objectStorageService := service.NewObjectStorageService(cfg.OSS)
 	storagePresignService := service.NewStoragePresignService(objectStorageService, knowPostRepo, cfg.OSS.PresignExpireSeconds)
+	knowPostService := service.NewKnowPostService(knowPostRepo)
 
 	healthHandler := handler.NewHealthHandler([]handler.Checker{
 		store.NewMySQLChecker(db),
@@ -42,6 +43,7 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	authHandler := handler.NewAuthHandler(authService)
 	profileHandler := handler.NewProfileHandler(profileService, objectStorageService)
 	storageHandler := handler.NewStorageHandler(storagePresignService)
+	knowPostHandler := handler.NewKnowPostHandler(knowPostService)
 
 	enforcer, err := middleware.NewCasbinEnforcer()
 	if err != nil {
@@ -49,7 +51,7 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	}
 	authz := middleware.Authz(enforcer, cfg.Auth.JWT.Secret)
 
-	engine := router.NewEngine(healthHandler, authHandler, profileHandler, storageHandler, authz)
+	engine := router.NewEngine(healthHandler, authHandler, profileHandler, storageHandler, knowPostHandler, authz)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,

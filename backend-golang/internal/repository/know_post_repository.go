@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// KnowPostRepository 负责 know_posts 表的最小查询能力。
+// KnowPostRepository 负责 know_posts 表的数据访问能力。
 type KnowPostRepository struct {
 	db *gorm.DB
 }
@@ -16,6 +16,14 @@ type KnowPostRepository struct {
 // NewKnowPostRepository 创建 KnowPostRepository。
 func NewKnowPostRepository(db *gorm.DB) *KnowPostRepository {
 	return &KnowPostRepository{db: db}
+}
+
+// CreateDraft 插入知文草稿记录。
+func (r *KnowPostRepository) CreateDraft(ctx context.Context, post *model.KnowPost) error {
+	if err := r.db.WithContext(ctx).Create(post).Error; err != nil {
+		return fmt.Errorf("create knowpost draft: %w", err)
+	}
+	return nil
 }
 
 // IsOwnedBy 检查知文是否属于指定用户。
