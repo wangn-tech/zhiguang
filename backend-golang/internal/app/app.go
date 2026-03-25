@@ -6,7 +6,10 @@ import (
 	"time"
 	"zhiguang/internal/config"
 	"zhiguang/internal/handler"
+	"zhiguang/internal/middleware"
+	"zhiguang/internal/repository"
 	"zhiguang/internal/router"
+	"zhiguang/internal/service"
 	"zhiguang/internal/store"
 )
 
@@ -19,12 +22,27 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 
 	redisClient := store.NewRedis(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 
+	userRepo := repository.NewUserRepository(db)
+	loginLogRepo := repository.NewLoginLogRepository(db)
+	authService := service.NewAuthService(userRepo, loginLogRepo, redisClient, service.AuthOptions{
+		TokenSecret:     cfg.Auth.JWT.Secret,
+		AccessTokenTTL:  cfg.Auth.JWT.AccessTokenTTL,
+		RefreshTokenTTL: cfg.Auth.JWT.RefreshTokenTTL,
+	})
+
 	healthHandler := handler.NewHealthHandler([]handler.Checker{
 		store.NewMySQLChecker(db),
 		store.NewRedisChecker(redisClient),
 	})
+	authHandler := handler.NewAuthHandler(authService)
 
-	engine := router.NewEngine(healthHandler)
+	enforcer, err := middleware.NewCasbinEnforcer()
+	if err != nil {
+		return nil, fmt.Errorf("init casbin enforcer: %w", err)
+	}
+	authz := middleware.Authz(enforcer, cfg.Auth.JWT.Secret)
+
+	engine := router.NewEngine(healthHandler, authHandler, authz)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,

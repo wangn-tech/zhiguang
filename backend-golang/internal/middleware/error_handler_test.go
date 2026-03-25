@@ -14,7 +14,7 @@ func TestErrorHandler_BusinessError(t *testing.T) {
 	r := gin.New()
 	r.Use(ErrorHandler())
 	r.GET("/business", func(c *gin.Context) {
-		_ = c.Error(errorsx.New(errorsx.CodeBadRequest, "参数错误"))
+		c.Error(errorsx.New(errorsx.CodeBadRequest, "参数错误"))
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/business", nil)

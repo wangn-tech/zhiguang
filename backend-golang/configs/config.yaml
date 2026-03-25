@@ -18,3 +18,9 @@ redis:
   addr: "127.0.0.1:6379"
   password: ""
   db: 0
+
+auth:
+  jwt:
+    secret: "zhiguang-dev-jwt-secret"
+    access_token_ttl: "15m"
+    refresh_token_ttl: "168h"

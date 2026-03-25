@@ -25,17 +25,13 @@ func NewHealthHandler(checkers []Checker) *HealthHandler {
 	return &HealthHandler{checkers: checkers}
 }
 
-// Register 注册健康检查与就绪检查路由。
-func (h *HealthHandler) Register(r gin.IRouter) {
-	r.GET("/healthz", h.healthz)
-	r.GET("/readyz", h.readyz)
-}
-
-func (h *HealthHandler) healthz(c *gin.Context) {
+// Healthz 返回存活状态。
+func (h *HealthHandler) Healthz(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-func (h *HealthHandler) readyz(c *gin.Context) {
+// Readyz 返回依赖就绪状态。
+func (h *HealthHandler) Readyz(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
 

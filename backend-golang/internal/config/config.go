@@ -14,6 +14,7 @@ type Config struct {
 	Logger LoggerConfig
 	MySQL  MySQLConfig
 	Redis  RedisConfig
+	Auth   AuthConfig
 }
 
 // ServerConfig 包含 HTTP server 相关配置。
@@ -43,6 +44,18 @@ type RedisConfig struct {
 	Addr     string
 	Password string
 	DB       int
+}
+
+// AuthConfig 包含认证域运行配置。
+type AuthConfig struct {
+	JWT JWTConfig
+}
+
+// JWTConfig 包含 JWT 相关配置。
+type JWTConfig struct {
+	Secret          string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
 }
 
 const defaultConfigPath = "configs/config.yaml"
@@ -87,6 +100,13 @@ func LoadFromPath(configPath string) (*Config, error) {
 			Password: v.GetString("redis.password"),
 			DB:       v.GetInt("redis.db"),
 		},
+		Auth: AuthConfig{
+			JWT: JWTConfig{
+				Secret:          v.GetString("auth.jwt.secret"),
+				AccessTokenTTL:  parseDurationOrDefault(v.GetString("auth.jwt.access_token_ttl"), 15*time.Minute),
+				RefreshTokenTTL: parseDurationOrDefault(v.GetString("auth.jwt.refresh_token_ttl"), 7*24*time.Hour),
+			},
+		},
 	}
 
 	return cfg, nil
@@ -109,6 +129,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redis.addr", "127.0.0.1:6379")
 	v.SetDefault("redis.password", "")
 	v.SetDefault("redis.db", 0)
+
+	v.SetDefault("auth.jwt.secret", "zhiguang-dev-jwt-secret")
+	v.SetDefault("auth.jwt.access_token_ttl", "15m")
+	v.SetDefault("auth.jwt.refresh_token_ttl", "168h")
 }
 
 func readConfigFile(v *viper.Viper, configPath string) error {

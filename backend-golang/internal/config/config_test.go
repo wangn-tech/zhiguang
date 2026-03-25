@@ -108,3 +108,32 @@ func TestLoadFromPath_FileNotFound(t *testing.T) {
 		t.Fatalf("LoadFromPath() should fail when config file does not exist")
 	}
 }
+
+func TestLoadFromPath_AuthJWTConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`auth:
+  jwt:
+    secret: "jwt-secret-from-file"
+    access_token_ttl: "20m"
+    refresh_token_ttl: "240h"
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error = %v", err)
+	}
+
+	if cfg.Auth.JWT.Secret != "jwt-secret-from-file" {
+		t.Fatalf("Auth.JWT.Secret = %s, want jwt-secret-from-file", cfg.Auth.JWT.Secret)
+	}
+	if cfg.Auth.JWT.AccessTokenTTL.String() != "20m0s" {
+		t.Fatalf("Auth.JWT.AccessTokenTTL = %s, want 20m0s", cfg.Auth.JWT.AccessTokenTTL)
+	}
+	if cfg.Auth.JWT.RefreshTokenTTL.String() != "240h0m0s" {
+		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 240h0m0s", cfg.Auth.JWT.RefreshTokenTTL)
+	}
+}

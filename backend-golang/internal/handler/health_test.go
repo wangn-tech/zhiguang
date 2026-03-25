@@ -24,7 +24,7 @@ func TestHealthz_OK(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	h := NewHealthHandler(nil)
-	h.Register(r)
+	r.GET("/healthz", h.Healthz)
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	w := httptest.NewRecorder()
@@ -51,7 +51,7 @@ func TestReadyz_OK(t *testing.T) {
 		fakeChecker{name: "mysql", err: nil},
 		fakeChecker{name: "redis", err: nil},
 	})
-	h.Register(r)
+	r.GET("/readyz", h.Readyz)
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
@@ -78,7 +78,7 @@ func TestReadyz_Unavailable(t *testing.T) {
 		fakeChecker{name: "mysql", err: errors.New("dial timeout")},
 		fakeChecker{name: "redis", err: nil},
 	})
-	h.Register(r)
+	r.GET("/readyz", h.Readyz)
 
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
 	w := httptest.NewRecorder()
