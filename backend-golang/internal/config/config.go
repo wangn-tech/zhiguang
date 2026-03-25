@@ -15,6 +15,7 @@ type Config struct {
 	MySQL  MySQLConfig
 	Redis  RedisConfig
 	Auth   AuthConfig
+	OSS    OSSConfig
 }
 
 // ServerConfig 包含 HTTP server 相关配置。
@@ -56,6 +57,17 @@ type JWTConfig struct {
 	Secret          string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
+}
+
+// OSSConfig 包含对象存储配置。
+type OSSConfig struct {
+	Endpoint             string
+	AccessKeyID          string
+	AccessKeySecret      string
+	Bucket               string
+	PublicDomain         string
+	Folder               string
+	PresignExpireSeconds int
 }
 
 const defaultConfigPath = "configs/config.yaml"
@@ -107,6 +119,15 @@ func LoadFromPath(configPath string) (*Config, error) {
 				RefreshTokenTTL: parseDurationOrDefault(v.GetString("auth.jwt.refresh_token_ttl"), 7*24*time.Hour),
 			},
 		},
+		OSS: OSSConfig{
+			Endpoint:             v.GetString("oss.endpoint"),
+			AccessKeyID:          v.GetString("oss.access_key_id"),
+			AccessKeySecret:      v.GetString("oss.access_key_secret"),
+			Bucket:               v.GetString("oss.bucket"),
+			PublicDomain:         v.GetString("oss.public_domain"),
+			Folder:               v.GetString("oss.folder"),
+			PresignExpireSeconds: v.GetInt("oss.presign_expire_seconds"),
+		},
 	}
 
 	return cfg, nil
@@ -133,6 +154,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.jwt.secret", "zhiguang-dev-jwt-secret")
 	v.SetDefault("auth.jwt.access_token_ttl", "15m")
 	v.SetDefault("auth.jwt.refresh_token_ttl", "168h")
+
+	v.SetDefault("oss.endpoint", "")
+	v.SetDefault("oss.access_key_id", "")
+	v.SetDefault("oss.access_key_secret", "")
+	v.SetDefault("oss.bucket", "")
+	v.SetDefault("oss.public_domain", "")
+	v.SetDefault("oss.folder", "avatars")
+	v.SetDefault("oss.presign_expire_seconds", 600)
 }
 
 func readConfigFile(v *viper.Viper, configPath string) error {

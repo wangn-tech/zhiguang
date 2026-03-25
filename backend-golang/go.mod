@@ -3,6 +3,7 @@ module zhiguang
 go 1.24.6
 
 require (
+	github.com/aliyun/aliyun-oss-go-sdk v2.2.10+incompatible
 	github.com/casbin/casbin/v2 v2.103.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-playground/validator/v10 v10.27.0
@@ -56,6 +57,7 @@ require (
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

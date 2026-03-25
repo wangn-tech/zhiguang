@@ -24,3 +24,12 @@ auth:
     secret: "zhiguang-dev-jwt-secret"
     access_token_ttl: "15m"
     refresh_token_ttl: "168h"
+
+oss:
+  endpoint: ""
+  access_key_id: ""
+  access_key_secret: ""
+  bucket: ""
+  public_domain: ""
+  folder: "avatars"
+  presign_expire_seconds: 600

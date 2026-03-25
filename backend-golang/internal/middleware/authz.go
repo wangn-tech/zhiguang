@@ -120,6 +120,10 @@ func defaultAuthzPolicies() []AuthzPolicy {
 		{Subject: "*", Path: "/api/v1/auth/logout", Method: "POST"},
 		{Subject: "*", Path: "/api/v1/auth/password/reset", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/auth/me", Method: "GET"},
+		{Subject: authzSubjectUser, Path: "/api/v1/profile", Method: "GET"},
+		{Subject: authzSubjectUser, Path: "/api/v1/profile", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/profile/avatar", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/storage/presign", Method: "POST"},
 	}
 }
 
