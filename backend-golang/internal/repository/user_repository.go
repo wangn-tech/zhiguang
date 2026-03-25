@@ -77,3 +77,55 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, userID uint64, pass
 	}
 	return nil
 }
+
+// ExistsByZgIDExceptID 判断知光号是否被其他用户占用。
+func (r *UserRepository) ExistsByZgIDExceptID(ctx context.Context, zgID string, exceptUserID uint64) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("zg_id = ? AND id <> ?", zgID, exceptUserID).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check zg_id existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+// ExistsByPhoneExceptID 判断手机号是否被其他用户占用。
+func (r *UserRepository) ExistsByPhoneExceptID(ctx context.Context, phone string, exceptUserID uint64) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("phone = ? AND id <> ?", phone, exceptUserID).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check phone existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+// ExistsByEmailExceptID 判断邮箱是否被其他用户占用。
+func (r *UserRepository) ExistsByEmailExceptID(ctx context.Context, email string, exceptUserID uint64) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.User{}).
+		Where("email = ? AND id <> ?", email, exceptUserID).
+		Count(&count).Error
+	if err != nil {
+		return false, fmt.Errorf("check email existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+// UpdateProfileFields 按字段更新用户资料。
+func (r *UserRepository) UpdateProfileFields(ctx context.Context, userID uint64, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+
+	result := r.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", userID).Updates(fields)
+	if result.Error != nil {
+		return fmt.Errorf("update profile fields: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}

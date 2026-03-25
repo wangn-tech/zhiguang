@@ -137,3 +137,35 @@ func TestLoadFromPath_AuthJWTConfig(t *testing.T) {
 		t.Fatalf("Auth.JWT.RefreshTokenTTL = %s, want 240h0m0s", cfg.Auth.JWT.RefreshTokenTTL)
 	}
 }
+
+func TestLoadFromPath_OSSConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`oss:
+  endpoint: "oss-cn-beijing.aliyuncs.com"
+  access_key_id: "ak"
+  access_key_secret: "sk"
+  bucket: "zhiguang-bucket"
+  public_domain: "https://cdn.example.com"
+  folder: "uploads"
+  presign_expire_seconds: 900
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error = %v", err)
+	}
+
+	if cfg.OSS.Endpoint != "oss-cn-beijing.aliyuncs.com" {
+		t.Fatalf("OSS.Endpoint = %s, want oss-cn-beijing.aliyuncs.com", cfg.OSS.Endpoint)
+	}
+	if cfg.OSS.Folder != "uploads" {
+		t.Fatalf("OSS.Folder = %s, want uploads", cfg.OSS.Folder)
+	}
+	if cfg.OSS.PresignExpireSeconds != 900 {
+		t.Fatalf("OSS.PresignExpireSeconds = %d, want 900", cfg.OSS.PresignExpireSeconds)
+	}
+}

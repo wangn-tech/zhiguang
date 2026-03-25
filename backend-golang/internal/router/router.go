@@ -8,7 +8,13 @@ import (
 )
 
 // NewEngine 创建并初始化 Gin 路由引擎。
-func NewEngine(healthHandler *handler.HealthHandler, authHandler *handler.AuthHandler, authz gin.HandlerFunc) *gin.Engine {
+func NewEngine(
+	healthHandler *handler.HealthHandler,
+	authHandler *handler.AuthHandler,
+	profileHandler *handler.ProfileHandler,
+	storageHandler *handler.StorageHandler,
+	authz gin.HandlerFunc,
+) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), middleware.ErrorHandler())
 	if authz != nil {
@@ -28,6 +34,18 @@ func NewEngine(healthHandler *handler.HealthHandler, authHandler *handler.AuthHa
 	auth.POST("/logout", authHandler.Logout)
 	auth.POST("/password/reset", authHandler.ResetPassword)
 	auth.GET("/me", authHandler.Me)
+
+	if profileHandler != nil {
+		profile := r.Group("/api/v1/profile")
+		profile.GET("", profileHandler.Get)
+		profile.PATCH("", profileHandler.Patch)
+		profile.POST("/avatar", profileHandler.UploadAvatar)
+	}
+
+	if storageHandler != nil {
+		storage := r.Group("/api/v1/storage")
+		storage.POST("/presign", storageHandler.Presign)
+	}
 
 	return r
 }

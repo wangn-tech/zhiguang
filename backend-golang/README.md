@@ -1,6 +1,6 @@
 # backend-golang
 
-## Phase 0-2 当前能力
+## 当前能力（Phase 0-3 部分）
 - Gin HTTP 服务骨架
 - 使用 `viper` 从 YAML 配置文件读取配置（默认 `configs/config.yaml`）
 - 使用 `zap` 封装日志
@@ -10,16 +10,26 @@
 - 统一错误响应：`{ "code": "...", "message": "..." }`
 - Casbin 最小鉴权策略（公开接口 + 登录保护接口）
 
-## Auth 配置
+## 关键配置
 ```yaml
 auth:
   jwt:
     secret: "zhiguang-dev-jwt-secret"
     access_token_ttl: "15m"
     refresh_token_ttl: "168h"
+
+oss:
+  endpoint: ""
+  access_key_id: ""
+  access_key_secret: ""
+  bucket: ""
+  public_domain: ""
+  folder: "avatars"
+  presign_expire_seconds: 600
 ```
 
-## 已支持的 Auth 接口
+## 已支持接口
+### Auth
 - `POST /api/v1/auth/send-code`
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
@@ -27,6 +37,14 @@ auth:
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/password/reset`
 - `GET /api/v1/auth/me`
+
+### Profile
+- `GET /api/v1/profile`
+- `PATCH /api/v1/profile`
+- `POST /api/v1/profile/avatar`
+
+### Storage
+- `POST /api/v1/storage/presign`
 
 ## 常用启动命令
 1. 先启动依赖（MySQL + Redis）：

@@ -24,17 +24,24 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 
 	userRepo := repository.NewUserRepository(db)
 	loginLogRepo := repository.NewLoginLogRepository(db)
+	knowPostRepo := repository.NewKnowPostRepository(db)
+
 	authService := service.NewAuthService(userRepo, loginLogRepo, redisClient, service.AuthOptions{
 		TokenSecret:     cfg.Auth.JWT.Secret,
 		AccessTokenTTL:  cfg.Auth.JWT.AccessTokenTTL,
 		RefreshTokenTTL: cfg.Auth.JWT.RefreshTokenTTL,
 	})
+	profileService := service.NewProfileService(userRepo)
+	objectStorageService := service.NewObjectStorageService(cfg.OSS)
+	storagePresignService := service.NewStoragePresignService(objectStorageService, knowPostRepo, cfg.OSS.PresignExpireSeconds)
 
 	healthHandler := handler.NewHealthHandler([]handler.Checker{
 		store.NewMySQLChecker(db),
 		store.NewRedisChecker(redisClient),
 	})
 	authHandler := handler.NewAuthHandler(authService)
+	profileHandler := handler.NewProfileHandler(profileService, objectStorageService)
+	storageHandler := handler.NewStorageHandler(storagePresignService)
 
 	enforcer, err := middleware.NewCasbinEnforcer()
 	if err != nil {
@@ -42,7 +49,7 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	}
 	authz := middleware.Authz(enforcer, cfg.Auth.JWT.Secret)
 
-	engine := router.NewEngine(healthHandler, authHandler, authz)
+	engine := router.NewEngine(healthHandler, authHandler, profileHandler, storageHandler, authz)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,
