@@ -14,6 +14,9 @@ func NewEngine(
 	profileHandler *handler.ProfileHandler,
 	storageHandler *handler.StorageHandler,
 	knowPostHandler *handler.KnowPostHandler,
+	relationHandler *handler.RelationHandler,
+	actionHandler *handler.ActionHandler,
+	counterHandler *handler.CounterHandler,
 	authz gin.HandlerFunc,
 ) *gin.Engine {
 	r := gin.New()
@@ -61,6 +64,29 @@ func NewEngine(
 		knowposts.DELETE("/:id", knowPostHandler.Delete)
 		knowposts.POST("/description/suggest", knowPostHandler.SuggestDescription)
 		knowposts.POST("/:id/publish", knowPostHandler.Publish)
+	}
+
+	if relationHandler != nil {
+		relation := r.Group("/api/v1/relation")
+		relation.POST("/follow", relationHandler.Follow)
+		relation.POST("/unfollow", relationHandler.Unfollow)
+		relation.GET("/status", relationHandler.Status)
+		relation.GET("/following", relationHandler.Following)
+		relation.GET("/followers", relationHandler.Followers)
+		relation.GET("/counter", relationHandler.Counter)
+	}
+
+	if actionHandler != nil {
+		action := r.Group("/api/v1/action")
+		action.POST("/like", actionHandler.Like)
+		action.POST("/unlike", actionHandler.Unlike)
+		action.POST("/fav", actionHandler.Fav)
+		action.POST("/unfav", actionHandler.Unfav)
+	}
+
+	if counterHandler != nil {
+		counter := r.Group("/api/v1/counter")
+		counter.GET("/:entityType/:entityId", counterHandler.GetCounts)
 	}
 
 	return r

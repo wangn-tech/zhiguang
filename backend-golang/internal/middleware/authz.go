@@ -142,6 +142,17 @@ func defaultAuthzPolicies() []AuthzPolicy {
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id", Method: "DELETE"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/description/suggest", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/publish", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/relation/follow", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/relation/unfollow", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/relation/status", Method: "GET"},
+		{Subject: "*", Path: "/api/v1/relation/following", Method: "GET"},
+		{Subject: "*", Path: "/api/v1/relation/followers", Method: "GET"},
+		{Subject: authzSubjectUser, Path: "/api/v1/relation/counter", Method: "GET"},
+		{Subject: authzSubjectUser, Path: "/api/v1/action/like", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/action/unlike", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/action/fav", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/action/unfav", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/counter/:entityType/:entityId", Method: "GET"},
 	}
 }
 

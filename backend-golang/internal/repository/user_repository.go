@@ -58,6 +58,31 @@ func (r *UserRepository) FindByID(ctx context.Context, id uint64) (*model.User, 
 	return nil, fmt.Errorf("find user by id: %w", err)
 }
 
+// FindByIDs 按 ID 列表查询用户并保持输入顺序。
+func (r *UserRepository) FindByIDs(ctx context.Context, ids []uint64) ([]model.User, error) {
+	if len(ids) == 0 {
+		return []model.User{}, nil
+	}
+
+	rows := make([]model.User, 0, len(ids))
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("find users by ids: %w", err)
+	}
+
+	index := make(map[uint64]model.User, len(rows))
+	for _, row := range rows {
+		index[row.ID] = row
+	}
+
+	ordered := make([]model.User, 0, len(ids))
+	for _, id := range ids {
+		if user, ok := index[id]; ok {
+			ordered = append(ordered, user)
+		}
+	}
+	return ordered, nil
+}
+
 // Create 插入用户记录。
 func (r *UserRepository) Create(ctx context.Context, user *model.User) error {
 	if err := r.db.WithContext(ctx).Create(user).Error; err != nil {

@@ -25,6 +25,8 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	userRepo := repository.NewUserRepository(db)
 	loginLogRepo := repository.NewLoginLogRepository(db)
 	knowPostRepo := repository.NewKnowPostRepository(db)
+	counterRepo := repository.NewCounterRepository(redisClient)
+	relationRepo := repository.NewRelationRepository(redisClient)
 
 	authService := service.NewAuthService(userRepo, loginLogRepo, redisClient, service.AuthOptions{
 		TokenSecret:     cfg.Auth.JWT.Secret,
@@ -35,6 +37,8 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	objectStorageService := service.NewObjectStorageService(cfg.OSS)
 	storagePresignService := service.NewStoragePresignService(objectStorageService, knowPostRepo, cfg.OSS.PresignExpireSeconds)
 	knowPostService := service.NewKnowPostService(knowPostRepo, cfg.OSS)
+	counterService := service.NewCounterService(counterRepo)
+	relationService := service.NewRelationService(relationRepo, userRepo, knowPostRepo, counterRepo)
 
 	healthHandler := handler.NewHealthHandler([]handler.Checker{
 		store.NewMySQLChecker(db),
@@ -44,6 +48,9 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	profileHandler := handler.NewProfileHandler(profileService, objectStorageService)
 	storageHandler := handler.NewStorageHandler(storagePresignService)
 	knowPostHandler := handler.NewKnowPostHandler(knowPostService)
+	relationHandler := handler.NewRelationHandler(relationService)
+	actionHandler := handler.NewActionHandler(counterService)
+	counterHandler := handler.NewCounterHandler(counterService)
 
 	enforcer, err := middleware.NewCasbinEnforcer()
 	if err != nil {
@@ -51,7 +58,7 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	}
 	authz := middleware.Authz(enforcer, cfg.Auth.JWT.Secret)
 
-	engine := router.NewEngine(healthHandler, authHandler, profileHandler, storageHandler, knowPostHandler, authz)
+	engine := router.NewEngine(healthHandler, authHandler, profileHandler, storageHandler, knowPostHandler, relationHandler, actionHandler, counterHandler, authz)
 
 	server := &http.Server{
 		Addr:              ":" + cfg.Server.Port,

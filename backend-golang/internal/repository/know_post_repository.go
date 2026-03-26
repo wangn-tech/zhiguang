@@ -272,6 +272,18 @@ func (r *KnowPostRepository) SoftDelete(ctx context.Context, postID uint64, crea
 	return result.RowsAffected > 0, nil
 }
 
+// CountPublishedByCreator 统计用户已发布知文数量。
+func (r *KnowPostRepository) CountPublishedByCreator(ctx context.Context, creatorID uint64) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.KnowPost{}).
+		Where("creator_id = ? AND status = ?", creatorID, "published").
+		Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("count published knowposts: %w", err)
+	}
+	return count, nil
+}
+
 // IsOwnedBy 检查知文是否属于指定用户。
 func (r *KnowPostRepository) IsOwnedBy(ctx context.Context, postID uint64, userID uint64) (bool, error) {
 	var count int64
