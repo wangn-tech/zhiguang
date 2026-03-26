@@ -13,6 +13,7 @@ func NewEngine(
 	authHandler *handler.AuthHandler,
 	profileHandler *handler.ProfileHandler,
 	storageHandler *handler.StorageHandler,
+	knowPostHandler *handler.KnowPostHandler,
 	authz gin.HandlerFunc,
 ) *gin.Engine {
 	r := gin.New()
@@ -45,6 +46,21 @@ func NewEngine(
 	if storageHandler != nil {
 		storage := r.Group("/api/v1/storage")
 		storage.POST("/presign", storageHandler.Presign)
+	}
+
+	if knowPostHandler != nil {
+		knowposts := r.Group("/api/v1/knowposts")
+		knowposts.GET("/feed", knowPostHandler.Feed)
+		knowposts.GET("/mine", knowPostHandler.Mine)
+		knowposts.GET("/detail/:id", knowPostHandler.Detail)
+		knowposts.POST("/drafts", knowPostHandler.CreateDraft)
+		knowposts.POST("/:id/content/confirm", knowPostHandler.ConfirmContent)
+		knowposts.PATCH("/:id", knowPostHandler.PatchMetadata)
+		knowposts.PATCH("/:id/top", knowPostHandler.PatchTop)
+		knowposts.PATCH("/:id/visibility", knowPostHandler.PatchVisibility)
+		knowposts.DELETE("/:id", knowPostHandler.Delete)
+		knowposts.POST("/description/suggest", knowPostHandler.SuggestDescription)
+		knowposts.POST("/:id/publish", knowPostHandler.Publish)
 	}
 
 	return r

@@ -43,6 +43,54 @@ type storagePresignService struct {
 	expiresIn int
 }
 
+type storageExtRule struct {
+	defaultExt string
+	allowedExt map[string]struct{}
+}
+
+var storageContentRules = map[string]map[string]storageExtRule{
+	"knowpost_content": {
+		"text/markdown": {
+			defaultExt: ".md",
+			allowedExt: map[string]struct{}{".md": {}, ".markdown": {}},
+		},
+		"text/html": {
+			defaultExt: ".html",
+			allowedExt: map[string]struct{}{".html": {}, ".htm": {}},
+		},
+		"text/plain": {
+			defaultExt: ".txt",
+			allowedExt: map[string]struct{}{".txt": {}},
+		},
+		"application/json": {
+			defaultExt: ".json",
+			allowedExt: map[string]struct{}{".json": {}},
+		},
+	},
+	"knowpost_image": {
+		"image/jpeg": {
+			defaultExt: ".jpg",
+			allowedExt: map[string]struct{}{".jpg": {}, ".jpeg": {}},
+		},
+		"image/png": {
+			defaultExt: ".png",
+			allowedExt: map[string]struct{}{".png": {}},
+		},
+		"image/webp": {
+			defaultExt: ".webp",
+			allowedExt: map[string]struct{}{".webp": {}},
+		},
+		"image/svg+xml": {
+			defaultExt: ".svg",
+			allowedExt: map[string]struct{}{".svg": {}},
+		},
+		"image/gif": {
+			defaultExt: ".gif",
+			allowedExt: map[string]struct{}{".gif": {}},
+		},
+	},
+}
+
 // NewStoragePresignService 创建预签名服务。
 func NewStoragePresignService(storage ObjectStorageService, knowposts KnowPostOwnershipChecker, expiresIn int) StoragePresignService {
 	if expiresIn <= 0 {
@@ -55,10 +103,15 @@ func NewStoragePresignService(storage ObjectStorageService, knowposts KnowPostOw
 	}
 }
 
-// Presign 校验场景与草稿归属后生成上传地址。
+// Presign 校验场景、文件类型与草稿归属后生成上传地址。
+// 关键逻辑：按 scene+contentType 限制允许的扩展名，防止前端误传不合法文件组合。
 func (s *storagePresignService) Presign(ctx context.Context, userID uint64, req StoragePresignRequest) (StoragePresignResponse, error) {
-	scene := strings.TrimSpace(req.Scene)
-	contentType := strings.TrimSpace(req.ContentType)
+	if userID == 0 {
+		return StoragePresignResponse{}, errorsx.New(errorsx.CodeBadRequest, "用户标识无效")
+	}
+
+	scene := strings.ToLower(strings.TrimSpace(req.Scene))
+	contentType := normalizeContentType(req.ContentType)
 	if scene == "" || contentType == "" || strings.TrimSpace(req.PostID) == "" {
 		return StoragePresignResponse{}, errorsx.New(errorsx.CodeBadRequest, "scene/postId/contentType 不能为空")
 	}
@@ -78,9 +131,9 @@ func (s *storagePresignService) Presign(ctx context.Context, userID uint64, req 
 		}
 	}
 
-	ext := normalizeStorageExt(strings.TrimSpace(req.Ext), contentType, scene)
-	if ext == "" {
-		return StoragePresignResponse{}, errorsx.New(errorsx.CodeBadRequest, "不支持的上传场景")
+	ext, err := resolveStorageExt(scene, contentType, req.Ext)
+	if err != nil {
+		return StoragePresignResponse{}, err
 	}
 
 	objectKey, err := buildObjectKey(scene, postID, ext)
@@ -119,44 +172,48 @@ func buildObjectKey(scene string, postID uint64, ext string) (string, error) {
 	}
 }
 
-func normalizeStorageExt(ext string, contentType string, scene string) string {
-	if ext != "" {
-		if strings.HasPrefix(ext, ".") {
-			return ext
-		}
-		return "." + ext
+func resolveStorageExt(scene string, contentType string, ext string) (string, error) {
+	sceneRules, ok := storageContentRules[scene]
+	if !ok {
+		return "", errorsx.New(errorsx.CodeBadRequest, "不支持的上传场景")
 	}
 
-	switch scene {
-	case "knowpost_content":
-		switch contentType {
-		case "text/markdown":
-			return ".md"
-		case "text/html":
-			return ".html"
-		case "text/plain":
-			return ".txt"
-		case "application/json":
-			return ".json"
-		default:
-			return ".bin"
-		}
-	case "knowpost_image":
-		switch contentType {
-		case "image/jpeg":
-			return ".jpg"
-		case "image/png":
-			return ".png"
-		case "image/webp":
-			return ".webp"
-		case "image/svg+xml":
-			return ".svg"
-		default:
-			return ".img"
-		}
-	default:
+	rule, ok := sceneRules[contentType]
+	if !ok {
+		return "", errorsx.New(errorsx.CodeBadRequest, "contentType 非法或不支持")
+	}
+
+	normalizedExt := normalizeStorageExt(ext)
+	if normalizedExt == "" {
+		return rule.defaultExt, nil
+	}
+
+	if _, ok := rule.allowedExt[normalizedExt]; !ok {
+		return "", errorsx.New(errorsx.CodeBadRequest, "ext 与 contentType 不匹配")
+	}
+	return normalizedExt, nil
+}
+
+func normalizeStorageExt(ext string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(ext))
+	if trimmed == "" {
 		return ""
 	}
+	if strings.HasPrefix(trimmed, ".") {
+		return trimmed
+	}
+	return "." + trimmed
+}
+
+func normalizeContentType(raw string) string {
+	trimmed := strings.ToLower(strings.TrimSpace(raw))
+	if trimmed == "" {
+		return ""
+	}
+	if idx := strings.Index(trimmed, ";"); idx >= 0 {
+		trimmed = strings.TrimSpace(trimmed[:idx])
+	}
+	return trimmed
 }
 
 func randomHex(byteLen int) (string, error) {

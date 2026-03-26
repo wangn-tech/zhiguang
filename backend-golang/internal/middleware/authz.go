@@ -26,18 +26,18 @@ type AuthzPolicy struct {
 // NewCasbinEnforcer 创建最小可用权限引擎并写入默认策略。
 func NewCasbinEnforcer() (*casbin.Enforcer, error) {
 	m, err := model.NewModelFromString(`
-[request_definition]
-r = sub, obj, act
+	[request_definition]
+	r = sub, obj, act
 
-[policy_definition]
-p = sub, obj, act
+	[policy_definition]
+	p = sub, obj, act
 
-[policy_effect]
-e = some(where (p.eft == allow))
+	[policy_effect]
+	e = some(where (p.eft == allow))
 
-[matchers]
-m = keyMatch2(r.obj, p.obj) && regexMatch(r.act, p.act) && (p.sub == "*" || r.sub == p.sub)
-`)
+	[matchers]
+	m = keyMatch2(r.obj, p.obj) && regexMatch(r.act, p.act) && (p.sub == "*" || r.sub == p.sub)
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +74,13 @@ func Authz(enforcer *casbin.Enforcer, tokenSecret string) gin.HandlerFunc {
 			return
 		}
 		if allowedAnonymous {
+			token := parseBearerToken(c.GetHeader("Authorization"))
+			if token != "" {
+				claims, parseErr := jwtx.Parse(token, tokenSecret)
+				if parseErr == nil && claims.TokenType == "access" {
+					c.Set("auth_user_id", claims.UserID)
+				}
+			}
 			c.Next()
 			return
 		}
@@ -124,6 +131,17 @@ func defaultAuthzPolicies() []AuthzPolicy {
 		{Subject: authzSubjectUser, Path: "/api/v1/profile", Method: "PATCH"},
 		{Subject: authzSubjectUser, Path: "/api/v1/profile/avatar", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/storage/presign", Method: "POST"},
+		{Subject: "*", Path: "/api/v1/knowposts/feed", Method: "GET"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/mine", Method: "GET"},
+		{Subject: "*", Path: "/api/v1/knowposts/detail/:id", Method: "GET"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/drafts", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/content/confirm", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/top", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/visibility", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id", Method: "DELETE"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/description/suggest", Method: "POST"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/publish", Method: "POST"},
 	}
 }
 
