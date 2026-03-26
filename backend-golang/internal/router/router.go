@@ -52,6 +52,7 @@ func NewEngine(
 		knowposts := r.Group("/api/v1/knowposts")
 		knowposts.GET("/feed", knowPostHandler.Feed)
 		knowposts.GET("/mine", knowPostHandler.Mine)
+		knowposts.GET("/detail/:id", knowPostHandler.Detail)
 		knowposts.POST("/drafts", knowPostHandler.CreateDraft)
 		knowposts.POST("/:id/content/confirm", knowPostHandler.ConfirmContent)
 		knowposts.PATCH("/:id", knowPostHandler.PatchMetadata)

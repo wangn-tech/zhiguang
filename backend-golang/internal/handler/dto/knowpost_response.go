@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 // KnowPostDraftCreateResponse 表示创建草稿接口响应。
 type KnowPostDraftCreateResponse struct {
 	ID string `json:"id"`
@@ -29,4 +31,26 @@ type KnowPostFeedResponse struct {
 	Page    int                        `json:"page"`
 	Size    int                        `json:"size"`
 	HasMore bool                       `json:"hasMore"`
+}
+
+// KnowPostDetailResponse 表示知文详情响应。
+type KnowPostDetailResponse struct {
+	ID             string     `json:"id"`
+	Title          string     `json:"title"`
+	Description    string     `json:"description"`
+	ContentURL     string     `json:"contentUrl"`
+	Images         []string   `json:"images"`
+	Tags           []string   `json:"tags"`
+	AuthorAvatar   string     `json:"authorAvatar,omitempty"`
+	AuthorNickname string     `json:"authorNickname"`
+	AuthorID       uint64     `json:"authorId,omitempty"`
+	AuthorTagJSON  string     `json:"authorTagJson,omitempty"`
+	LikeCount      int64      `json:"likeCount"`
+	FavoriteCount  int64      `json:"favoriteCount"`
+	Liked          bool       `json:"liked"`
+	Faved          bool       `json:"faved"`
+	IsTop          bool       `json:"isTop"`
+	Visible        string     `json:"visible"`
+	Type           string     `json:"type"`
+	PublishTime    *time.Time `json:"publishTime,omitempty"`
 }

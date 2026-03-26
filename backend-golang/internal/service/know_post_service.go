@@ -28,6 +28,7 @@ type KnowPostService interface {
 	Publish(ctx context.Context, creatorID uint64, postID uint64) error
 	GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error)
 	GetMyPublished(ctx context.Context, creatorID uint64, page int, size int) (KnowPostFeedPage, error)
+	GetDetail(ctx context.Context, postID uint64, currentUserID *uint64) (KnowPostDetail, error)
 }
 
 type knowPostService struct {
@@ -78,6 +79,28 @@ type KnowPostFeedItem struct {
 	Faved          bool
 	IsTop          bool
 	Visible        string
+}
+
+// KnowPostDetail 表示知文详情数据。
+type KnowPostDetail struct {
+	ID             string
+	Title          string
+	Description    string
+	ContentURL     string
+	Images         []string
+	Tags           []string
+	AuthorID       uint64
+	AuthorAvatar   string
+	AuthorNickname string
+	AuthorTagJSON  string
+	LikeCount      int64
+	FavoriteCount  int64
+	Liked          bool
+	Faved          bool
+	IsTop          bool
+	Visible        string
+	Type           string
+	PublishTime    *time.Time
 }
 
 // NewKnowPostService 创建知文服务。
@@ -365,6 +388,65 @@ func (s *knowPostService) GetMyPublished(ctx context.Context, creatorID uint64, 
 		Page:    safePage,
 		Size:    safeSize,
 		HasMore: hasMore,
+	}, nil
+}
+
+// GetDetail 返回知文详情。
+// 关键逻辑：公开内容可匿名访问，非公开内容仅作者可访问。
+func (s *knowPostService) GetDetail(ctx context.Context, postID uint64, currentUserID *uint64) (KnowPostDetail, error) {
+	if postID == 0 {
+		return KnowPostDetail{}, errorsx.New(errorsx.CodeBadRequest, "id 非法")
+	}
+
+	row, err := s.repo.GetDetailByID(ctx, postID)
+	if err != nil {
+		return KnowPostDetail{}, err
+	}
+	if row == nil || strings.EqualFold(strings.TrimSpace(row.Status), "deleted") {
+		return KnowPostDetail{}, errorsx.New(errorsx.CodeBadRequest, "内容不存在")
+	}
+
+	status := strings.ToLower(strings.TrimSpace(row.Status))
+	visible := strings.ToLower(strings.TrimSpace(row.Visible))
+	isPublic := status == "published" && visible == "public"
+	isOwner := currentUserID != nil && *currentUserID > 0 && *currentUserID == row.CreatorID
+	if !isPublic && !isOwner {
+		return KnowPostDetail{}, errorsx.New(errorsx.CodeBadRequest, "无权限查看")
+	}
+
+	authorAvatar := ""
+	if row.AuthorAvatar != nil {
+		authorAvatar = strings.TrimSpace(*row.AuthorAvatar)
+	}
+	authorTagJSON := ""
+	if row.AuthorTagJSON != nil {
+		authorTagJSON = strings.TrimSpace(*row.AuthorTagJSON)
+	}
+
+	typ := strings.TrimSpace(row.Type)
+	if typ == "" {
+		typ = "image_text"
+	}
+
+	return KnowPostDetail{
+		ID:             strconv.FormatUint(row.ID, 10),
+		Title:          strings.TrimSpace(row.Title),
+		Description:    strings.TrimSpace(row.Description),
+		ContentURL:     strings.TrimSpace(row.ContentURL),
+		Images:         parseJSONStringArray(row.ImageURLsJSON),
+		Tags:           parseJSONStringArray(row.TagsJSON),
+		AuthorID:       row.CreatorID,
+		AuthorAvatar:   authorAvatar,
+		AuthorNickname: strings.TrimSpace(row.AuthorNickname),
+		AuthorTagJSON:  authorTagJSON,
+		LikeCount:      0,
+		FavoriteCount:  0,
+		Liked:          false,
+		Faved:          false,
+		IsTop:          row.IsTop,
+		Visible:        visible,
+		Type:           typ,
+		PublishTime:    row.PublishTime,
 	}, nil
 }
 

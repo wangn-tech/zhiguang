@@ -138,6 +138,49 @@ func (h *KnowPostHandler) Mine(c *gin.Context) {
 	})
 }
 
+// Detail 返回知文详情。
+func (h *KnowPostHandler) Detail(c *gin.Context) {
+	postID, err := parseKnowPostID(c.Param("id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	var viewerID *uint64
+	if raw, ok := c.Get("auth_user_id"); ok {
+		if uid, ok := raw.(uint64); ok && uid > 0 {
+			viewerID = &uid
+		}
+	}
+
+	detail, err := h.service.GetDetail(c.Request.Context(), postID, viewerID)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.KnowPostDetailResponse{
+		ID:             detail.ID,
+		Title:          detail.Title,
+		Description:    detail.Description,
+		ContentURL:     detail.ContentURL,
+		Images:         detail.Images,
+		Tags:           detail.Tags,
+		AuthorAvatar:   detail.AuthorAvatar,
+		AuthorNickname: detail.AuthorNickname,
+		AuthorID:       detail.AuthorID,
+		AuthorTagJSON:  detail.AuthorTagJSON,
+		LikeCount:      detail.LikeCount,
+		FavoriteCount:  detail.FavoriteCount,
+		Liked:          detail.Liked,
+		Faved:          detail.Faved,
+		IsTop:          detail.IsTop,
+		Visible:        detail.Visible,
+		Type:           detail.Type,
+		PublishTime:    detail.PublishTime,
+	})
+}
+
 // ConfirmContent 确认正文上传结果并写回对象信息。
 func (h *KnowPostHandler) ConfirmContent(c *gin.Context) {
 	userID, err := AuthUserIDFromContext(c)

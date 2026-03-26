@@ -193,6 +193,70 @@ func TestKnowPostHandler_Mine_Success(t *testing.T) {
 	}
 }
 
+func TestKnowPostHandler_Detail_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{
+		detailResp: service.KnowPostDetail{
+			ID:             "10003",
+			Title:          "知文详情",
+			Description:    "详情描述",
+			ContentURL:     "https://cdn.example.com/content.md",
+			Images:         []string{"https://cdn.example.com/3.png"},
+			Tags:           []string{"Go"},
+			AuthorID:       1001,
+			AuthorAvatar:   "https://cdn.example.com/a.png",
+			AuthorNickname: "alice",
+			AuthorTagJSON:  `["后端"]`,
+			LikeCount:      0,
+			FavoriteCount:  0,
+			Liked:          false,
+			Faved:          false,
+			IsTop:          false,
+			Visible:        "public",
+			Type:           "image_text",
+		},
+	})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/knowposts/detail/:id", h.Detail)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowposts/detail/10003", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got, _ := body["id"].(string); got != "10003" {
+		t.Fatalf("id = %s, want 10003", got)
+	}
+}
+
+func TestKnowPostHandler_Detail_InvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/knowposts/detail/:id", h.Detail)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowposts/detail/abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestKnowPostHandler_ConfirmContent_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -356,6 +420,8 @@ type fakeKnowPostService struct {
 	feedErr    error
 	mineResp   service.KnowPostFeedPage
 	mineErr    error
+	detailResp service.KnowPostDetail
+	detailErr  error
 }
 
 func (s *fakeKnowPostService) CreateDraft(_ context.Context, _ uint64) (uint64, error) {
@@ -377,6 +443,13 @@ func (s *fakeKnowPostService) GetMyPublished(_ context.Context, _ uint64, _ int,
 		return service.KnowPostFeedPage{}, s.mineErr
 	}
 	return s.mineResp, nil
+}
+
+func (s *fakeKnowPostService) GetDetail(_ context.Context, _ uint64, _ *uint64) (service.KnowPostDetail, error) {
+	if s.detailErr != nil {
+		return service.KnowPostDetail{}, s.detailErr
+	}
+	return s.detailResp, nil
 }
 
 func (s *fakeKnowPostService) ConfirmContent(_ context.Context, _ uint64, _ uint64, _ service.KnowPostContentConfirmRequest) error {

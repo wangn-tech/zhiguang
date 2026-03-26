@@ -74,6 +74,13 @@ func Authz(enforcer *casbin.Enforcer, tokenSecret string) gin.HandlerFunc {
 			return
 		}
 		if allowedAnonymous {
+			token := parseBearerToken(c.GetHeader("Authorization"))
+			if token != "" {
+				claims, parseErr := jwtx.Parse(token, tokenSecret)
+				if parseErr == nil && claims.TokenType == "access" {
+					c.Set("auth_user_id", claims.UserID)
+				}
+			}
 			c.Next()
 			return
 		}
@@ -126,6 +133,7 @@ func defaultAuthzPolicies() []AuthzPolicy {
 		{Subject: authzSubjectUser, Path: "/api/v1/storage/presign", Method: "POST"},
 		{Subject: "*", Path: "/api/v1/knowposts/feed", Method: "GET"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/mine", Method: "GET"},
+		{Subject: "*", Path: "/api/v1/knowposts/detail/:id", Method: "GET"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/drafts", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/content/confirm", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id", Method: "PATCH"},

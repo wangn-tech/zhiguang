@@ -28,6 +28,25 @@ type KnowPostFeedRow struct {
 	AuthorTagJSON  *string `gorm:"column:author_tag_json"`
 }
 
+// KnowPostDetailRow 表示详情查询返回的原始行数据。
+type KnowPostDetailRow struct {
+	ID             uint64     `gorm:"column:id"`
+	CreatorID      uint64     `gorm:"column:creator_id"`
+	Title          string     `gorm:"column:title"`
+	Description    string     `gorm:"column:description"`
+	ContentURL     string     `gorm:"column:content_url"`
+	ImageURLsJSON  *string    `gorm:"column:img_urls"`
+	TagsJSON       *string    `gorm:"column:tags"`
+	AuthorAvatar   *string    `gorm:"column:author_avatar"`
+	AuthorNickname string     `gorm:"column:author_nickname"`
+	AuthorTagJSON  *string    `gorm:"column:author_tag_json"`
+	PublishTime    *time.Time `gorm:"column:publish_time"`
+	IsTop          bool       `gorm:"column:is_top"`
+	Visible        string     `gorm:"column:visible"`
+	Type           string     `gorm:"column:type"`
+	Status         string     `gorm:"column:status"`
+}
+
 // NewKnowPostRepository 创建 KnowPostRepository。
 func NewKnowPostRepository(db *gorm.DB) *KnowPostRepository {
 	return &KnowPostRepository{db: db}
@@ -175,6 +194,40 @@ func (r *KnowPostRepository) ListMyPublished(ctx context.Context, creatorID uint
 		rows = rows[:size]
 	}
 	return rows, hasMore, nil
+}
+
+// GetDetailByID 按知文 ID 读取详情信息。
+func (r *KnowPostRepository) GetDetailByID(ctx context.Context, postID uint64) (*KnowPostDetailRow, error) {
+	var row KnowPostDetailRow
+	err := r.db.WithContext(ctx).
+		Table("know_posts AS kp").
+		Select(`
+			kp.id,
+			kp.creator_id,
+			COALESCE(kp.title, '') AS title,
+			COALESCE(kp.description, '') AS description,
+			COALESCE(kp.content_url, '') AS content_url,
+			kp.img_urls,
+			kp.tags,
+			u.avatar AS author_avatar,
+			u.nickname AS author_nickname,
+			u.tags_json AS author_tag_json,
+			kp.publish_time,
+			kp.is_top,
+			kp.visible,
+			kp.type,
+			kp.status
+		`).
+		Joins("JOIN users AS u ON u.id = kp.creator_id").
+		Where("kp.id = ?", postID).
+		Take(&row).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get knowpost detail: %w", err)
+	}
+	return &row, nil
 }
 
 // IsOwnedBy 检查知文是否属于指定用户。
