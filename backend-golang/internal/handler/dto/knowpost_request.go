@@ -7,3 +7,14 @@ type KnowPostContentConfirmRequest struct {
 	Size      int64  `json:"size" binding:"required,gt=0"`
 	SHA256    string `json:"sha256" binding:"required"`
 }
+
+// KnowPostPatchRequest 表示知文元数据更新请求。
+type KnowPostPatchRequest struct {
+	Title       *string   `json:"title"`
+	TagID       *int64    `json:"tagId"`
+	Tags        *[]string `json:"tags"`
+	ImageURLs   *[]string `json:"imgUrls"`
+	Visible     *string   `json:"visible"`
+	IsTop       *bool     `json:"isTop"`
+	Description *string   `json:"description"`
+}

@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 	"zhiguang/internal/config"
 	"zhiguang/internal/model"
 	"zhiguang/internal/repository"
@@ -21,6 +23,7 @@ var (
 type KnowPostService interface {
 	CreateDraft(ctx context.Context, creatorID uint64) (uint64, error)
 	ConfirmContent(ctx context.Context, creatorID uint64, postID uint64, req KnowPostContentConfirmRequest) error
+	UpdateMetadata(ctx context.Context, creatorID uint64, postID uint64, req KnowPostMetadataPatchRequest) error
 }
 
 type knowPostService struct {
@@ -34,6 +37,17 @@ type KnowPostContentConfirmRequest struct {
 	ETag      string
 	Size      int64
 	SHA256    string
+}
+
+// KnowPostMetadataPatchRequest 表示知文元数据更新参数。
+type KnowPostMetadataPatchRequest struct {
+	Title       *string
+	TagID       *int64
+	Tags        *[]string
+	ImageURLs   *[]string
+	Visible     *string
+	IsTop       *bool
+	Description *string
 }
 
 // NewKnowPostService 创建知文服务。
@@ -102,6 +116,98 @@ func (s *knowPostService) ConfirmContent(ctx context.Context, creatorID uint64, 
 	return nil
 }
 
+// UpdateMetadata 更新知文元数据字段。
+// 关键逻辑：对 title/tags/imgUrls/visible/description 做入参校验，按作者归属执行部分更新。
+func (s *knowPostService) UpdateMetadata(ctx context.Context, creatorID uint64, postID uint64, req KnowPostMetadataPatchRequest) error {
+	if creatorID == 0 || postID == 0 {
+		return errorsx.New(errorsx.CodeBadRequest, "请求参数错误")
+	}
+
+	updates := make(map[string]any)
+
+	if req.Title != nil {
+		title := strings.TrimSpace(*req.Title)
+		if title == "" {
+			return errorsx.New(errorsx.CodeBadRequest, "标题不能为空")
+		}
+		if utf8.RuneCountInString(title) > 256 {
+			return errorsx.New(errorsx.CodeBadRequest, "标题长度不能超过 256")
+		}
+		updates["title"] = title
+	}
+
+	if req.TagID != nil {
+		if *req.TagID <= 0 {
+			return errorsx.New(errorsx.CodeBadRequest, "tagId 非法")
+		}
+		updates["tag_id"] = *req.TagID
+	}
+
+	if req.Tags != nil {
+		if len(*req.Tags) > 20 {
+			return errorsx.New(errorsx.CodeBadRequest, "tags 最多 20 项")
+		}
+		normalized, err := normalizeStringList(*req.Tags, "tags")
+		if err != nil {
+			return err
+		}
+		raw, err := json.Marshal(normalized)
+		if err != nil {
+			return errorsx.New(errorsx.CodeBadRequest, "tags 序列化失败")
+		}
+		updates["tags"] = string(raw)
+	}
+
+	if req.ImageURLs != nil {
+		if len(*req.ImageURLs) > 20 {
+			return errorsx.New(errorsx.CodeBadRequest, "imgUrls 最多 20 项")
+		}
+		normalized, err := normalizeStringList(*req.ImageURLs, "imgUrls")
+		if err != nil {
+			return err
+		}
+		raw, err := json.Marshal(normalized)
+		if err != nil {
+			return errorsx.New(errorsx.CodeBadRequest, "imgUrls 序列化失败")
+		}
+		updates["img_urls"] = string(raw)
+	}
+
+	if req.Visible != nil {
+		visible := strings.ToLower(strings.TrimSpace(*req.Visible))
+		if !isValidVisible(visible) {
+			return errorsx.New(errorsx.CodeBadRequest, "visible 取值非法")
+		}
+		updates["visible"] = visible
+	}
+
+	if req.IsTop != nil {
+		updates["is_top"] = *req.IsTop
+	}
+
+	if req.Description != nil {
+		description := strings.TrimSpace(*req.Description)
+		if utf8.RuneCountInString(description) > 50 {
+			return errorsx.New(errorsx.CodeBadRequest, "description 长度不能超过 50")
+		}
+		updates["description"] = description
+	}
+
+	if len(updates) == 0 {
+		return errorsx.New(errorsx.CodeBadRequest, "未提交任何更新字段")
+	}
+
+	updates["type"] = "image_text"
+	updated, err := s.repo.UpdateMetadata(ctx, postID, creatorID, updates)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return errorsx.New(errorsx.CodeBadRequest, "草稿不存在或无权限")
+	}
+	return nil
+}
+
 func nextKnowPostID(now time.Time) uint64 {
 	millis := uint64(now.UnixMilli())
 	seq := uint64(knowPostDraftSeq.Add(1) & 0x0fff)
@@ -115,6 +221,27 @@ func buildKnowPostContentPublicURL(oss config.OSSConfig, objectKey string) strin
 	}
 	endpoint := strings.TrimPrefix(strings.TrimPrefix(oss.Endpoint, "https://"), "http://")
 	return "https://" + oss.Bucket + "." + endpoint + "/" + trimmedKey
+}
+
+func normalizeStringList(values []string, fieldName string) ([]string, error) {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return nil, errorsx.New(errorsx.CodeBadRequest, fieldName+" 存在空值")
+		}
+		normalized = append(normalized, trimmed)
+	}
+	return normalized, nil
+}
+
+func isValidVisible(visible string) bool {
+	switch visible {
+	case "public", "followers", "school", "private", "unlisted":
+		return true
+	default:
+		return false
+	}
 }
 
 func isDuplicateEntryError(err error) bool {

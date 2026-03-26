@@ -229,3 +229,32 @@ func TestAuthz_KnowPostContentConfirm_AllowsValidAccessToken(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 	}
 }
+
+func TestAuthz_KnowPostPatch_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.PATCH("/api/v1/knowposts/:id", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/123", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}

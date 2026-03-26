@@ -47,6 +47,22 @@ func (r *KnowPostRepository) ConfirmContent(ctx context.Context, postID uint64, 
 	return result.RowsAffected > 0, nil
 }
 
+// UpdateMetadata 按作者归属更新知文元数据字段。
+func (r *KnowPostRepository) UpdateMetadata(ctx context.Context, postID uint64, creatorID uint64, updates map[string]any) (bool, error) {
+	if len(updates) == 0 {
+		return false, nil
+	}
+
+	updates["update_time"] = time.Now()
+	result := r.db.WithContext(ctx).Model(&model.KnowPost{}).
+		Where("id = ? AND creator_id = ?", postID, creatorID).
+		Updates(updates)
+	if result.Error != nil {
+		return false, fmt.Errorf("update knowpost metadata: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
 // IsOwnedBy 检查知文是否属于指定用户。
 func (r *KnowPostRepository) IsOwnedBy(ctx context.Context, postID uint64, userID uint64) (bool, error) {
 	var count int64

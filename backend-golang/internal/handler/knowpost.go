@@ -46,10 +46,9 @@ func (h *KnowPostHandler) ConfirmContent(c *gin.Context) {
 		return
 	}
 
-	idRaw := strings.TrimSpace(c.Param("id"))
-	postID, err := strconv.ParseUint(idRaw, 10, 64)
-	if err != nil || postID == 0 {
-		c.Error(errorsx.New(errorsx.CodeBadRequest, "id 非法"))
+	postID, err := parseKnowPostID(c.Param("id"))
+	if err != nil {
+		c.Error(err)
 		return
 	}
 
@@ -70,4 +69,49 @@ func (h *KnowPostHandler) ConfirmContent(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// PatchMetadata 更新知文元数据。
+func (h *KnowPostHandler) PatchMetadata(c *gin.Context) {
+	userID, err := AuthUserIDFromContext(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	postID, err := parseKnowPostID(c.Param("id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	var req dto.KnowPostPatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+
+	if err := h.service.UpdateMetadata(c.Request.Context(), userID, postID, service.KnowPostMetadataPatchRequest{
+		Title:       req.Title,
+		TagID:       req.TagID,
+		Tags:        req.Tags,
+		ImageURLs:   req.ImageURLs,
+		Visible:     req.Visible,
+		IsTop:       req.IsTop,
+		Description: req.Description,
+	}); err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+func parseKnowPostID(raw string) (uint64, error) {
+	idRaw := strings.TrimSpace(raw)
+	postID, err := strconv.ParseUint(idRaw, 10, 64)
+	if err != nil || postID == 0 {
+		return 0, errorsx.New(errorsx.CodeBadRequest, "id 非法")
+	}
+	return postID, nil
 }

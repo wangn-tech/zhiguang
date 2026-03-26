@@ -10,9 +10,9 @@ import (
 	"testing"
 	"zhiguang/internal/middleware"
 	"zhiguang/internal/service"
-)
 
-import "github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin"
+)
 
 func TestKnowPostHandler_CreateDraft_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -47,7 +47,7 @@ func TestKnowPostHandler_CreateDraft_Success(t *testing.T) {
 func TestKnowPostHandler_CreateDraft_ServiceError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	h := NewKnowPostHandler(&fakeKnowPostService{err: errors.New("db error")})
+	h := NewKnowPostHandler(&fakeKnowPostService{createErr: errors.New("db error")})
 
 	r := gin.New()
 	r.Use(middleware.ErrorHandler())
@@ -119,18 +119,80 @@ func TestKnowPostHandler_ConfirmContent_InvalidID(t *testing.T) {
 	}
 }
 
+func TestKnowPostHandler_PatchMetadata_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.PATCH("/api/v1/knowposts/:id", h.PatchMetadata)
+
+	body := map[string]any{
+		"title":       "Go 并发实践",
+		"tagId":       12,
+		"tags":        []string{"Go", "并发"},
+		"imgUrls":     []string{"https://cdn.example.com/a.png"},
+		"visible":     "public",
+		"isTop":       false,
+		"description": "并发模式整理",
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/1", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestKnowPostHandler_PatchMetadata_InvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.PATCH("/api/v1/knowposts/:id", h.PatchMetadata)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/abc", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 type fakeKnowPostService struct {
-	draftID uint64
-	err     error
+	draftID    uint64
+	createErr  error
+	confirmErr error
+	patchErr   error
 }
 
 func (s *fakeKnowPostService) CreateDraft(_ context.Context, _ uint64) (uint64, error) {
-	if s.err != nil {
-		return 0, s.err
+	if s.createErr != nil {
+		return 0, s.createErr
 	}
 	return s.draftID, nil
 }
 
 func (s *fakeKnowPostService) ConfirmContent(_ context.Context, _ uint64, _ uint64, _ service.KnowPostContentConfirmRequest) error {
-	return s.err
+	return s.confirmErr
+}
+
+func (s *fakeKnowPostService) UpdateMetadata(_ context.Context, _ uint64, _ uint64, _ service.KnowPostMetadataPatchRequest) error {
+	return s.patchErr
 }
