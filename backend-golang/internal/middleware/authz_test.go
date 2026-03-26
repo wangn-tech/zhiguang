@@ -870,3 +870,111 @@ func TestAuthz_RelationCounter_AllowsValidAccessToken(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
+
+func TestAuthz_MixedFlow_PublicReadableAndProtectedStrict(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+
+	var publicHasUser bool
+	var publicUserID uint64
+	r.GET("/api/v1/relation/following", func(c *gin.Context) {
+		publicHasUser = false
+		publicUserID = 0
+		if raw, ok := c.Get("auth_user_id"); ok {
+			uid, castOK := raw.(uint64)
+			if castOK {
+				publicHasUser = true
+				publicUserID = uid
+			}
+		}
+		c.Status(http.StatusOK)
+	})
+	r.GET("/api/v1/relation/status", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	r.POST("/api/v1/action/like", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	r.GET("/api/v1/counter/:entityType/:entityId", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	anonymousFollowingReq := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001", nil)
+	anonymousFollowingW := httptest.NewRecorder()
+	r.ServeHTTP(anonymousFollowingW, anonymousFollowingReq)
+	if anonymousFollowingW.Code != http.StatusOK {
+		t.Fatalf("anonymous following status = %d, want %d", anonymousFollowingW.Code, http.StatusOK)
+	}
+	if publicHasUser {
+		t.Fatalf("anonymous following unexpectedly contains auth_user_id = %d", publicUserID)
+	}
+
+	accessFollowingReq := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001", nil)
+	accessFollowingReq.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	accessFollowingW := httptest.NewRecorder()
+	r.ServeHTTP(accessFollowingW, accessFollowingReq)
+	if accessFollowingW.Code != http.StatusOK {
+		t.Fatalf("access following status = %d, want %d", accessFollowingW.Code, http.StatusOK)
+	}
+	if !publicHasUser || publicUserID != 1001 {
+		t.Fatalf("access following auth context = (%v,%d), want (true,1001)", publicHasUser, publicUserID)
+	}
+
+	statusNoTokenReq := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId=1002", nil)
+	statusNoTokenW := httptest.NewRecorder()
+	r.ServeHTTP(statusNoTokenW, statusNoTokenReq)
+	if statusNoTokenW.Code != http.StatusUnauthorized {
+		t.Fatalf("status without token = %d, want %d", statusNoTokenW.Code, http.StatusUnauthorized)
+	}
+
+	statusRefreshReq := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId=1002", nil)
+	statusRefreshReq.Header.Set("Authorization", "Bearer "+pair.RefreshToken)
+	statusRefreshW := httptest.NewRecorder()
+	r.ServeHTTP(statusRefreshW, statusRefreshReq)
+	if statusRefreshW.Code != http.StatusUnauthorized {
+		t.Fatalf("status with refresh token = %d, want %d", statusRefreshW.Code, http.StatusUnauthorized)
+	}
+
+	statusAccessReq := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId=1002", nil)
+	statusAccessReq.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	statusAccessW := httptest.NewRecorder()
+	r.ServeHTTP(statusAccessW, statusAccessReq)
+	if statusAccessW.Code != http.StatusOK {
+		t.Fatalf("status with access token = %d, want %d", statusAccessW.Code, http.StatusOK)
+	}
+
+	actionNoTokenReq := httptest.NewRequest(http.MethodPost, "/api/v1/action/like", nil)
+	actionNoTokenW := httptest.NewRecorder()
+	r.ServeHTTP(actionNoTokenW, actionNoTokenReq)
+	if actionNoTokenW.Code != http.StatusUnauthorized {
+		t.Fatalf("action without token = %d, want %d", actionNoTokenW.Code, http.StatusUnauthorized)
+	}
+
+	actionAccessReq := httptest.NewRequest(http.MethodPost, "/api/v1/action/like", nil)
+	actionAccessReq.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	actionAccessW := httptest.NewRecorder()
+	r.ServeHTTP(actionAccessW, actionAccessReq)
+	if actionAccessW.Code != http.StatusOK {
+		t.Fatalf("action with access token = %d, want %d", actionAccessW.Code, http.StatusOK)
+	}
+
+	counterAccessReq := httptest.NewRequest(http.MethodGet, "/api/v1/counter/knowpost/123?metrics=like,fav", nil)
+	counterAccessReq.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	counterAccessW := httptest.NewRecorder()
+	r.ServeHTTP(counterAccessW, counterAccessReq)
+	if counterAccessW.Code != http.StatusOK {
+		t.Fatalf("counter with access token = %d, want %d", counterAccessW.Code, http.StatusOK)
+	}
+}
