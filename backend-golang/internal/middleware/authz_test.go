@@ -258,3 +258,55 @@ func TestAuthz_KnowPostPatch_AllowsValidAccessToken(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
 	}
 }
+
+func TestAuthz_KnowPostPublish_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.POST("/api/v1/knowposts/:id/publish", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/knowposts/123/publish", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestAuthz_KnowPostFeed_AllowsAnonymous(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/knowposts/feed", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowposts/feed?page=1&size=20", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}

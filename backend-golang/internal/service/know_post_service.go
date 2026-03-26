@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,7 +17,7 @@ import (
 
 var (
 	knowPostDraftSeq    atomic.Uint32
-	knowPostSha256Regex = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
+	knowPostSha256Regex = regexp.MustCompile("^[a-fA-F0-9]{64}$")
 )
 
 // KnowPostService 负责知文主链路的核心业务。
@@ -24,6 +25,8 @@ type KnowPostService interface {
 	CreateDraft(ctx context.Context, creatorID uint64) (uint64, error)
 	ConfirmContent(ctx context.Context, creatorID uint64, postID uint64, req KnowPostContentConfirmRequest) error
 	UpdateMetadata(ctx context.Context, creatorID uint64, postID uint64, req KnowPostMetadataPatchRequest) error
+	Publish(ctx context.Context, creatorID uint64, postID uint64) error
+	GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error)
 }
 
 type knowPostService struct {
@@ -48,6 +51,32 @@ type KnowPostMetadataPatchRequest struct {
 	Visible     *string
 	IsTop       *bool
 	Description *string
+}
+
+// KnowPostFeedPage 表示公开 feed 分页结果。
+type KnowPostFeedPage struct {
+	Items   []KnowPostFeedItem
+	Page    int
+	Size    int
+	HasMore bool
+}
+
+// KnowPostFeedItem 表示 feed 中的一条知文记录。
+type KnowPostFeedItem struct {
+	ID             string
+	Title          string
+	Description    string
+	CoverImage     string
+	Tags           []string
+	TagJSON        string
+	AuthorAvatar   string
+	AuthorNickname string
+	LikeCount      int64
+	FavoriteCount  int64
+	Liked          bool
+	Faved          bool
+	IsTop          bool
+	Visible        string
 }
 
 // NewKnowPostService 创建知文服务。
@@ -208,6 +237,77 @@ func (s *knowPostService) UpdateMetadata(ctx context.Context, creatorID uint64, 
 	return nil
 }
 
+// Publish 发布知文，将状态切换为 published 并记录发布时间。
+func (s *knowPostService) Publish(ctx context.Context, creatorID uint64, postID uint64) error {
+	if creatorID == 0 || postID == 0 {
+		return errorsx.New(errorsx.CodeBadRequest, "请求参数错误")
+	}
+
+	updated, err := s.repo.Publish(ctx, postID, creatorID)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return errorsx.New(errorsx.CodeBadRequest, "草稿不存在或无权限")
+	}
+	return nil
+}
+
+// GetPublicFeed 返回公开已发布知文列表。
+// 关键逻辑：仅查询 published+public 的记录，并将 JSON 字段转为前端可直接消费的数据结构。
+func (s *knowPostService) GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error) {
+	safePage, safeSize := normalizeKnowPostPageSize(page, size)
+	rows, hasMore, err := s.repo.ListPublicFeed(ctx, safePage, safeSize)
+	if err != nil {
+		return KnowPostFeedPage{}, err
+	}
+
+	items := make([]KnowPostFeedItem, 0, len(rows))
+	for _, row := range rows {
+		imageURLs := parseJSONStringArray(row.ImageURLsJSON)
+		tags := parseJSONStringArray(row.TagsJSON)
+
+		coverImage := ""
+		if len(imageURLs) > 0 {
+			coverImage = imageURLs[0]
+		}
+
+		authorAvatar := ""
+		if row.AuthorAvatar != nil {
+			authorAvatar = strings.TrimSpace(*row.AuthorAvatar)
+		}
+
+		authorTagJSON := ""
+		if row.AuthorTagJSON != nil {
+			authorTagJSON = strings.TrimSpace(*row.AuthorTagJSON)
+		}
+
+		items = append(items, KnowPostFeedItem{
+			ID:             strconv.FormatUint(row.ID, 10),
+			Title:          strings.TrimSpace(row.Title),
+			Description:    strings.TrimSpace(row.Description),
+			CoverImage:     coverImage,
+			Tags:           tags,
+			TagJSON:        authorTagJSON,
+			AuthorAvatar:   authorAvatar,
+			AuthorNickname: strings.TrimSpace(row.AuthorNickname),
+			LikeCount:      0,
+			FavoriteCount:  0,
+			Liked:          false,
+			Faved:          false,
+			IsTop:          row.IsTop,
+			Visible:        strings.TrimSpace(row.Visible),
+		})
+	}
+
+	return KnowPostFeedPage{
+		Items:   items,
+		Page:    safePage,
+		Size:    safeSize,
+		HasMore: hasMore,
+	}, nil
+}
+
 func nextKnowPostID(now time.Time) uint64 {
 	millis := uint64(now.UnixMilli())
 	seq := uint64(knowPostDraftSeq.Add(1) & 0x0fff)
@@ -233,6 +333,41 @@ func normalizeStringList(values []string, fieldName string) ([]string, error) {
 		normalized = append(normalized, trimmed)
 	}
 	return normalized, nil
+}
+
+func normalizeKnowPostPageSize(page int, size int) (int, int) {
+	const (
+		defaultPage = 1
+		defaultSize = 20
+		maxSize     = 50
+	)
+
+	if page <= 0 {
+		page = defaultPage
+	}
+	if size <= 0 {
+		size = defaultSize
+	}
+	if size > maxSize {
+		size = maxSize
+	}
+	return page, size
+}
+
+func parseJSONStringArray(raw *string) []string {
+	if raw == nil {
+		return []string{}
+	}
+	trimmed := strings.TrimSpace(*raw)
+	if trimmed == "" {
+		return []string{}
+	}
+
+	var values []string
+	if err := json.Unmarshal([]byte(trimmed), &values); err != nil {
+		return []string{}
+	}
+	return values
 }
 
 func isValidVisible(visible string) bool {

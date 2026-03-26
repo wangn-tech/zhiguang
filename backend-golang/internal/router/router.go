@@ -50,9 +50,11 @@ func NewEngine(
 
 	if knowPostHandler != nil {
 		knowposts := r.Group("/api/v1/knowposts")
+		knowposts.GET("/feed", knowPostHandler.Feed)
 		knowposts.POST("/drafts", knowPostHandler.CreateDraft)
 		knowposts.POST("/:id/content/confirm", knowPostHandler.ConfirmContent)
 		knowposts.PATCH("/:id", knowPostHandler.PatchMetadata)
+		knowposts.POST("/:id/publish", knowPostHandler.Publish)
 	}
 
 	return r

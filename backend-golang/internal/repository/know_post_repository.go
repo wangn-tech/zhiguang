@@ -14,6 +14,20 @@ type KnowPostRepository struct {
 	db *gorm.DB
 }
 
+// KnowPostFeedRow 表示 feed 列表查询返回的原始行数据。
+type KnowPostFeedRow struct {
+	ID             uint64  `gorm:"column:id"`
+	Title          string  `gorm:"column:title"`
+	Description    string  `gorm:"column:description"`
+	ImageURLsJSON  *string `gorm:"column:img_urls"`
+	TagsJSON       *string `gorm:"column:tags"`
+	Visible        string  `gorm:"column:visible"`
+	IsTop          bool    `gorm:"column:is_top"`
+	AuthorAvatar   *string `gorm:"column:author_avatar"`
+	AuthorNickname string  `gorm:"column:author_nickname"`
+	AuthorTagJSON  *string `gorm:"column:author_tag_json"`
+}
+
 // NewKnowPostRepository 创建 KnowPostRepository。
 func NewKnowPostRepository(db *gorm.DB) *KnowPostRepository {
 	return &KnowPostRepository{db: db}
@@ -61,6 +75,65 @@ func (r *KnowPostRepository) UpdateMetadata(ctx context.Context, postID uint64, 
 		return false, fmt.Errorf("update knowpost metadata: %w", result.Error)
 	}
 	return result.RowsAffected > 0, nil
+}
+
+// Publish 将指定知文状态更新为已发布并记录发布时间。
+func (r *KnowPostRepository) Publish(ctx context.Context, postID uint64, creatorID uint64) (bool, error) {
+	now := time.Now()
+	updates := map[string]any{
+		"status":       "published",
+		"publish_time": now,
+		"update_time":  now,
+	}
+
+	result := r.db.WithContext(ctx).Model(&model.KnowPost{}).
+		Where("id = ? AND creator_id = ?", postID, creatorID).
+		Updates(updates)
+	if result.Error != nil {
+		return false, fmt.Errorf("publish knowpost: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// ListPublicFeed 分页读取公开且已发布的知文列表。
+func (r *KnowPostRepository) ListPublicFeed(ctx context.Context, page int, size int) ([]KnowPostFeedRow, bool, error) {
+	if size <= 0 {
+		return []KnowPostFeedRow{}, false, nil
+	}
+
+	offset := (page - 1) * size
+	limit := size + 1
+	rows := make([]KnowPostFeedRow, 0, limit)
+
+	err := r.db.WithContext(ctx).
+		Table("know_posts AS kp").
+		Select(`
+			kp.id,
+			COALESCE(kp.title, '') AS title,
+			COALESCE(kp.description, '') AS description,
+			kp.img_urls,
+			kp.tags,
+			kp.visible,
+			kp.is_top,
+			u.avatar AS author_avatar,
+			u.nickname AS author_nickname,
+			u.tags_json AS author_tag_json
+		`).
+		Joins("JOIN users AS u ON u.id = kp.creator_id").
+		Where("kp.status = ? AND kp.visible = ?", "published", "public").
+		Order("kp.is_top DESC, kp.publish_time DESC, kp.id DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, false, fmt.Errorf("list public feed: %w", err)
+	}
+
+	hasMore := len(rows) > size
+	if hasMore {
+		rows = rows[:size]
+	}
+	return rows, hasMore, nil
 }
 
 // IsOwnedBy 检查知文是否属于指定用户。
