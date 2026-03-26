@@ -138,6 +138,61 @@ func TestKnowPostHandler_Feed_InvalidPage(t *testing.T) {
 	}
 }
 
+func TestKnowPostHandler_Mine_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{
+		mineResp: service.KnowPostFeedPage{
+			Items: []service.KnowPostFeedItem{{
+				ID:             "10002",
+				Title:          "我的发布",
+				Description:    "仅我可见范围也会返回",
+				CoverImage:     "https://cdn.example.com/2.png",
+				Tags:           []string{"后端"},
+				TagJSON:        `[]`,
+				AuthorNickname: "alice",
+				IsTop:          true,
+				Visible:        "private",
+			}},
+			Page:    1,
+			Size:    20,
+			HasMore: false,
+		},
+	})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.GET("/api/v1/knowposts/mine", h.Mine)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowposts/mine?page=1&size=20", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	items, ok := body["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("item type assertion failed")
+	}
+	if got, _ := item["id"].(string); got != "10002" {
+		t.Fatalf("id = %s, want 10002", got)
+	}
+}
+
 func TestKnowPostHandler_ConfirmContent_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -299,6 +354,8 @@ type fakeKnowPostService struct {
 	publishErr error
 	feedResp   service.KnowPostFeedPage
 	feedErr    error
+	mineResp   service.KnowPostFeedPage
+	mineErr    error
 }
 
 func (s *fakeKnowPostService) CreateDraft(_ context.Context, _ uint64) (uint64, error) {
@@ -313,6 +370,13 @@ func (s *fakeKnowPostService) GetPublicFeed(_ context.Context, _ int, _ int) (se
 		return service.KnowPostFeedPage{}, s.feedErr
 	}
 	return s.feedResp, nil
+}
+
+func (s *fakeKnowPostService) GetMyPublished(_ context.Context, _ uint64, _ int, _ int) (service.KnowPostFeedPage, error) {
+	if s.mineErr != nil {
+		return service.KnowPostFeedPage{}, s.mineErr
+	}
+	return s.mineResp, nil
 }
 
 func (s *fakeKnowPostService) ConfirmContent(_ context.Context, _ uint64, _ uint64, _ service.KnowPostContentConfirmRequest) error {

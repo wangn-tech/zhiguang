@@ -85,6 +85,59 @@ func (h *KnowPostHandler) Feed(c *gin.Context) {
 	})
 }
 
+// Mine 返回当前用户已发布知文分页列表。
+func (h *KnowPostHandler) Mine(c *gin.Context) {
+	userID, err := AuthUserIDFromContext(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	page, err := parseOptionalPositiveInt(c.Query("page"), 1, "page")
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	size, err := parseOptionalPositiveInt(c.Query("size"), 20, "size")
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	feed, err := h.service.GetMyPublished(c.Request.Context(), userID, page, size)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	items := make([]dto.KnowPostFeedItemResponse, 0, len(feed.Items))
+	for _, item := range feed.Items {
+		items = append(items, dto.KnowPostFeedItemResponse{
+			ID:             item.ID,
+			Title:          item.Title,
+			Description:    item.Description,
+			CoverImage:     item.CoverImage,
+			Tags:           item.Tags,
+			TagJSON:        item.TagJSON,
+			AuthorAvatar:   item.AuthorAvatar,
+			AuthorNickname: item.AuthorNickname,
+			LikeCount:      item.LikeCount,
+			FavoriteCount:  item.FavoriteCount,
+			Liked:          item.Liked,
+			Faved:          item.Faved,
+			IsTop:          item.IsTop,
+			Visible:        item.Visible,
+		})
+	}
+
+	c.JSON(http.StatusOK, dto.KnowPostFeedResponse{
+		Items:   items,
+		Page:    feed.Page,
+		Size:    feed.Size,
+		HasMore: feed.HasMore,
+	})
+}
+
 // ConfirmContent 确认正文上传结果并写回对象信息。
 func (h *KnowPostHandler) ConfirmContent(c *gin.Context) {
 	userID, err := AuthUserIDFromContext(c)

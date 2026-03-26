@@ -27,6 +27,7 @@ type KnowPostService interface {
 	UpdateMetadata(ctx context.Context, creatorID uint64, postID uint64, req KnowPostMetadataPatchRequest) error
 	Publish(ctx context.Context, creatorID uint64, postID uint64) error
 	GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error)
+	GetMyPublished(ctx context.Context, creatorID uint64, page int, size int) (KnowPostFeedPage, error)
 }
 
 type knowPostService struct {
@@ -258,6 +259,65 @@ func (s *knowPostService) Publish(ctx context.Context, creatorID uint64, postID 
 func (s *knowPostService) GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error) {
 	safePage, safeSize := normalizeKnowPostPageSize(page, size)
 	rows, hasMore, err := s.repo.ListPublicFeed(ctx, safePage, safeSize)
+	if err != nil {
+		return KnowPostFeedPage{}, err
+	}
+
+	items := make([]KnowPostFeedItem, 0, len(rows))
+	for _, row := range rows {
+		imageURLs := parseJSONStringArray(row.ImageURLsJSON)
+		tags := parseJSONStringArray(row.TagsJSON)
+
+		coverImage := ""
+		if len(imageURLs) > 0 {
+			coverImage = imageURLs[0]
+		}
+
+		authorAvatar := ""
+		if row.AuthorAvatar != nil {
+			authorAvatar = strings.TrimSpace(*row.AuthorAvatar)
+		}
+
+		authorTagJSON := ""
+		if row.AuthorTagJSON != nil {
+			authorTagJSON = strings.TrimSpace(*row.AuthorTagJSON)
+		}
+
+		items = append(items, KnowPostFeedItem{
+			ID:             strconv.FormatUint(row.ID, 10),
+			Title:          strings.TrimSpace(row.Title),
+			Description:    strings.TrimSpace(row.Description),
+			CoverImage:     coverImage,
+			Tags:           tags,
+			TagJSON:        authorTagJSON,
+			AuthorAvatar:   authorAvatar,
+			AuthorNickname: strings.TrimSpace(row.AuthorNickname),
+			LikeCount:      0,
+			FavoriteCount:  0,
+			Liked:          false,
+			Faved:          false,
+			IsTop:          row.IsTop,
+			Visible:        strings.TrimSpace(row.Visible),
+		})
+	}
+
+	return KnowPostFeedPage{
+		Items:   items,
+		Page:    safePage,
+		Size:    safeSize,
+		HasMore: hasMore,
+	}, nil
+}
+
+// GetMyPublished 返回当前用户已发布的知文列表。
+// 关键逻辑：仅查询当前用户 status=published 的记录，复用 feed 响应结构以降低前端渲染分支。
+func (s *knowPostService) GetMyPublished(ctx context.Context, creatorID uint64, page int, size int) (KnowPostFeedPage, error) {
+	if creatorID == 0 {
+		return KnowPostFeedPage{}, errorsx.New(errorsx.CodeBadRequest, "用户标识无效")
+	}
+
+	safePage, safeSize := normalizeKnowPostPageSize(page, size)
+	rows, hasMore, err := s.repo.ListMyPublished(ctx, creatorID, safePage, safeSize)
 	if err != nil {
 		return KnowPostFeedPage{}, err
 	}

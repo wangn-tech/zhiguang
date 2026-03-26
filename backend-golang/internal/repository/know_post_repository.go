@@ -136,6 +136,47 @@ func (r *KnowPostRepository) ListPublicFeed(ctx context.Context, page int, size 
 	return rows, hasMore, nil
 }
 
+// ListMyPublished 分页读取当前用户已发布的知文列表。
+func (r *KnowPostRepository) ListMyPublished(ctx context.Context, creatorID uint64, page int, size int) ([]KnowPostFeedRow, bool, error) {
+	if size <= 0 {
+		return []KnowPostFeedRow{}, false, nil
+	}
+
+	offset := (page - 1) * size
+	limit := size + 1
+	rows := make([]KnowPostFeedRow, 0, limit)
+
+	err := r.db.WithContext(ctx).
+		Table("know_posts AS kp").
+		Select(`
+			kp.id,
+			COALESCE(kp.title, '') AS title,
+			COALESCE(kp.description, '') AS description,
+			kp.img_urls,
+			kp.tags,
+			kp.visible,
+			kp.is_top,
+			u.avatar AS author_avatar,
+			u.nickname AS author_nickname,
+			u.tags_json AS author_tag_json
+		`).
+		Joins("JOIN users AS u ON u.id = kp.creator_id").
+		Where("kp.creator_id = ? AND kp.status = ?", creatorID, "published").
+		Order("kp.is_top DESC, kp.publish_time DESC, kp.id DESC").
+		Limit(limit).
+		Offset(offset).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, false, fmt.Errorf("list my published knowposts: %w", err)
+	}
+
+	hasMore := len(rows) > size
+	if hasMore {
+		rows = rows[:size]
+	}
+	return rows, hasMore, nil
+}
+
 // IsOwnedBy 检查知文是否属于指定用户。
 func (r *KnowPostRepository) IsOwnedBy(ctx context.Context, postID uint64, userID uint64) (bool, error) {
 	var count int64

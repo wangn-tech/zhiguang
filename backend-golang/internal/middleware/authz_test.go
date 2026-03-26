@@ -310,3 +310,32 @@ func TestAuthz_KnowPostFeed_AllowsAnonymous(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
+
+func TestAuthz_KnowPostMine_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/knowposts/mine", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/knowposts/mine?page=1&size=20", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
