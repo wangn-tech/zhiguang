@@ -100,7 +100,7 @@ func (r *RelationRepository) listIDs(ctx context.Context, key string, limit int,
 
 	members := make([]string, 0, limit)
 	if cursor != nil {
-		result, err := r.redis.ZRevRangeByScore(ctx, key, &redis.ZRangeBy{Max: strconv.FormatInt(*cursor, 10), Min: "-inf", Offset: int64(offset), Count: int64(limit)}).Result()
+		result, err := r.redis.ZRevRangeByScore(ctx, key, &redis.ZRangeBy{Max: relationCursorMax(*cursor), Min: "-inf", Offset: int64(offset), Count: int64(limit)}).Result()
 		if err != nil {
 			return nil, fmt.Errorf("relation list by cursor: %w", err)
 		}
@@ -130,4 +130,9 @@ func relationFollowingKey(userID uint64) string {
 
 func relationFollowersKey(userID uint64) string {
 	return fmt.Sprintf("relation:followers:%d", userID)
+}
+
+// relationCursorMax 将游标转换为有序集合排他上界，避免翻页时重复读取上一页最后一条。
+func relationCursorMax(cursor int64) string {
+	return "(" + strconv.FormatInt(cursor, 10)
 }

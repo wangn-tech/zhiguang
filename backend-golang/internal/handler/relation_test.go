@@ -38,6 +38,31 @@ func TestRelationHandler_Follow_Success(t *testing.T) {
 	}
 }
 
+func TestRelationHandler_Unfollow_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{unfollowChanged: false})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/relation/unfollow", h.Unfollow)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/relation/unfollow?toUserId=1002", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if got := stringsTrimBody(w.Body.String()); got != "false" {
+		t.Fatalf("body = %s, want false", got)
+	}
+}
+
 func TestRelationHandler_Status_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -78,6 +103,50 @@ func TestRelationHandler_Following_Success(t *testing.T) {
 	r.GET("/api/v1/relation/following", h.Following)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001&limit=20&offset=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("len = %d, want 1", len(resp))
+	}
+}
+
+func TestRelationHandler_Following_InvalidCursor(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/following", h.Following)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001&cursor=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRelationHandler_Followers_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{profiles: []service.ProfileResponse{{ID: 1003, Nickname: "bob", Avatar: ""}}})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/followers", h.Followers)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/followers?userId=1001&limit=20&offset=0", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

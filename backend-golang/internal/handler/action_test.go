@@ -50,6 +50,42 @@ func TestActionHandler_Like_Success(t *testing.T) {
 	}
 }
 
+func TestActionHandler_Unlike_Idempotent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewActionHandler(&fakeCounterService{actionResult: service.ActionResult{Changed: false, Active: false}})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/action/unlike", h.Unlike)
+
+	body := map[string]any{"entityType": "knowpost", "entityId": "123"}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/unlike", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if changed, _ := resp["changed"].(bool); changed {
+		t.Fatalf("changed = %v, want false", changed)
+	}
+	if liked, _ := resp["liked"].(bool); liked {
+		t.Fatalf("liked = %v, want false", liked)
+	}
+}
+
 func TestActionHandler_Fav_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -80,6 +116,67 @@ func TestActionHandler_Fav_Success(t *testing.T) {
 	}
 	if faved, _ := resp["faved"].(bool); !faved {
 		t.Fatalf("faved = %v, want true", faved)
+	}
+}
+
+func TestActionHandler_Unfav_Idempotent(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewActionHandler(&fakeCounterService{actionResult: service.ActionResult{Changed: false, Active: false}})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/action/unfav", h.Unfav)
+
+	body := map[string]any{"entityType": "knowpost", "entityId": "123"}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/unfav", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if changed, _ := resp["changed"].(bool); changed {
+		t.Fatalf("changed = %v, want false", changed)
+	}
+	if faved, _ := resp["faved"].(bool); faved {
+		t.Fatalf("faved = %v, want false", faved)
+	}
+}
+
+func TestActionHandler_Like_ServiceError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewActionHandler(&fakeCounterService{actionErr: newBadRequestError("entityType/entityId 不能为空")})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/action/like", h.Like)
+
+	body := map[string]any{"entityType": "knowpost", "entityId": "123"}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/like", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
 
