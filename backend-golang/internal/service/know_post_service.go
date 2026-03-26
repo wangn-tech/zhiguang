@@ -26,9 +26,13 @@ type KnowPostService interface {
 	ConfirmContent(ctx context.Context, creatorID uint64, postID uint64, req KnowPostContentConfirmRequest) error
 	UpdateMetadata(ctx context.Context, creatorID uint64, postID uint64, req KnowPostMetadataPatchRequest) error
 	Publish(ctx context.Context, creatorID uint64, postID uint64) error
+	UpdateTop(ctx context.Context, creatorID uint64, postID uint64, isTop bool) error
+	UpdateVisibility(ctx context.Context, creatorID uint64, postID uint64, visible string) error
+	Delete(ctx context.Context, creatorID uint64, postID uint64) error
 	GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error)
 	GetMyPublished(ctx context.Context, creatorID uint64, page int, size int) (KnowPostFeedPage, error)
 	GetDetail(ctx context.Context, postID uint64, currentUserID *uint64) (KnowPostDetail, error)
+	SuggestDescription(ctx context.Context, creatorID uint64, content string) (string, error)
 }
 
 type knowPostService struct {
@@ -277,6 +281,59 @@ func (s *knowPostService) Publish(ctx context.Context, creatorID uint64, postID 
 	return nil
 }
 
+// UpdateTop 更新知文置顶状态。
+func (s *knowPostService) UpdateTop(ctx context.Context, creatorID uint64, postID uint64, isTop bool) error {
+	if creatorID == 0 || postID == 0 {
+		return errorsx.New(errorsx.CodeBadRequest, "请求参数错误")
+	}
+
+	updated, err := s.repo.UpdateTop(ctx, postID, creatorID, isTop)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return errorsx.New(errorsx.CodeBadRequest, "知文不存在或无权限")
+	}
+	return nil
+}
+
+// UpdateVisibility 更新知文可见性。
+func (s *knowPostService) UpdateVisibility(ctx context.Context, creatorID uint64, postID uint64, visible string) error {
+	if creatorID == 0 || postID == 0 {
+		return errorsx.New(errorsx.CodeBadRequest, "请求参数错误")
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(visible))
+	if !isValidVisible(normalized) {
+		return errorsx.New(errorsx.CodeBadRequest, "visible 取值非法")
+	}
+
+	updated, err := s.repo.UpdateVisibility(ctx, postID, creatorID, normalized)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return errorsx.New(errorsx.CodeBadRequest, "知文不存在或无权限")
+	}
+	return nil
+}
+
+// Delete 软删除知文。
+func (s *knowPostService) Delete(ctx context.Context, creatorID uint64, postID uint64) error {
+	if creatorID == 0 || postID == 0 {
+		return errorsx.New(errorsx.CodeBadRequest, "请求参数错误")
+	}
+
+	updated, err := s.repo.SoftDelete(ctx, postID, creatorID)
+	if err != nil {
+		return err
+	}
+	if !updated {
+		return errorsx.New(errorsx.CodeBadRequest, "知文不存在或无权限")
+	}
+	return nil
+}
+
 // GetPublicFeed 返回公开已发布知文列表。
 // 关键逻辑：仅查询 published+public 的记录，并将 JSON 字段转为前端可直接消费的数据结构。
 func (s *knowPostService) GetPublicFeed(ctx context.Context, page int, size int) (KnowPostFeedPage, error) {
@@ -450,6 +507,24 @@ func (s *knowPostService) GetDetail(ctx context.Context, postID uint64, currentU
 	}, nil
 }
 
+// SuggestDescription 基于正文生成摘要建议。
+// 关键逻辑：对正文做空白归一化并限制在 50 字符内，避免超长描述影响发布页展示。
+func (s *knowPostService) SuggestDescription(_ context.Context, creatorID uint64, content string) (string, error) {
+	if creatorID == 0 {
+		return "", errorsx.New(errorsx.CodeBadRequest, "用户标识无效")
+	}
+
+	normalized := strings.Join(strings.Fields(strings.TrimSpace(content)), " ")
+	if normalized == "" {
+		return "", errorsx.New(errorsx.CodeBadRequest, "content 不能为空")
+	}
+	if utf8.RuneCountInString(normalized) > 20000 {
+		return "", errorsx.New(errorsx.CodeBadRequest, "content 长度不能超过 20000")
+	}
+
+	return truncateToRunes(normalized, 50), nil
+}
+
 func nextKnowPostID(now time.Time) uint64 {
 	millis := uint64(now.UnixMilli())
 	seq := uint64(knowPostDraftSeq.Add(1) & 0x0fff)
@@ -510,6 +585,17 @@ func parseJSONStringArray(raw *string) []string {
 		return []string{}
 	}
 	return values
+}
+
+func truncateToRunes(input string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	runes := []rune(input)
+	if len(runes) <= max {
+		return input
+	}
+	return string(runes[:max])
 }
 
 func isValidVisible(visible string) bool {

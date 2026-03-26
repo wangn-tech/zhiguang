@@ -137,6 +137,10 @@ func defaultAuthzPolicies() []AuthzPolicy {
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/drafts", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/content/confirm", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/top", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/visibility", Method: "PATCH"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id", Method: "DELETE"},
+		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/description/suggest", Method: "POST"},
 		{Subject: authzSubjectUser, Path: "/api/v1/knowposts/:id/publish", Method: "POST"},
 	}
 }

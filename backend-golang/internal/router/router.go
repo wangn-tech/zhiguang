@@ -56,6 +56,10 @@ func NewEngine(
 		knowposts.POST("/drafts", knowPostHandler.CreateDraft)
 		knowposts.POST("/:id/content/confirm", knowPostHandler.ConfirmContent)
 		knowposts.PATCH("/:id", knowPostHandler.PatchMetadata)
+		knowposts.PATCH("/:id/top", knowPostHandler.PatchTop)
+		knowposts.PATCH("/:id/visibility", knowPostHandler.PatchVisibility)
+		knowposts.DELETE("/:id", knowPostHandler.Delete)
+		knowposts.POST("/description/suggest", knowPostHandler.SuggestDescription)
 		knowposts.POST("/:id/publish", knowPostHandler.Publish)
 	}
 

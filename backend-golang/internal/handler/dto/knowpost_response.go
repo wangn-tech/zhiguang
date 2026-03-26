@@ -7,6 +7,11 @@ type KnowPostDraftCreateResponse struct {
 	ID string `json:"id"`
 }
 
+// KnowPostDescriptionSuggestResponse 表示摘要建议接口响应。
+type KnowPostDescriptionSuggestResponse struct {
+	Description string `json:"description"`
+}
+
 // KnowPostFeedItemResponse 表示 feed 列表中的单条知文。
 type KnowPostFeedItemResponse struct {
 	ID             string   `json:"id"`

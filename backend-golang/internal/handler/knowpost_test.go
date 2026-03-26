@@ -257,6 +257,60 @@ func TestKnowPostHandler_Detail_InvalidID(t *testing.T) {
 	}
 }
 
+func TestKnowPostHandler_SuggestDescription_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{suggestResp: "建议摘要"})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/knowposts/description/suggest", h.SuggestDescription)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/knowposts/description/suggest", bytes.NewReader([]byte(`{"content":"正文内容"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got, _ := body["description"].(string); got != "建议摘要" {
+		t.Fatalf("description = %s, want 建议摘要", got)
+	}
+}
+
+func TestKnowPostHandler_SuggestDescription_InvalidBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/knowposts/description/suggest", h.SuggestDescription)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/knowposts/description/suggest", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestKnowPostHandler_ConfirmContent_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -366,6 +420,142 @@ func TestKnowPostHandler_PatchMetadata_InvalidID(t *testing.T) {
 	}
 }
 
+func TestKnowPostHandler_PatchTop_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.PATCH("/api/v1/knowposts/:id/top", h.PatchTop)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/1/top", bytes.NewReader([]byte(`{"isTop":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestKnowPostHandler_PatchTop_InvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.PATCH("/api/v1/knowposts/:id/top", h.PatchTop)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/abc/top", bytes.NewReader([]byte(`{"isTop":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestKnowPostHandler_PatchVisibility_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.PATCH("/api/v1/knowposts/:id/visibility", h.PatchVisibility)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/1/visibility", bytes.NewReader([]byte(`{"visible":"private"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestKnowPostHandler_PatchVisibility_InvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.PATCH("/api/v1/knowposts/:id/visibility", h.PatchVisibility)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/v1/knowposts/abc/visibility", bytes.NewReader([]byte(`{"visible":"private"}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
+func TestKnowPostHandler_Delete_Success(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.DELETE("/api/v1/knowposts/:id", h.Delete)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/knowposts/1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
+func TestKnowPostHandler_Delete_InvalidID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewKnowPostHandler(&fakeKnowPostService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.DELETE("/api/v1/knowposts/:id", h.Delete)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v1/knowposts/abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+}
+
 func TestKnowPostHandler_Publish_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -411,17 +601,22 @@ func TestKnowPostHandler_Publish_InvalidID(t *testing.T) {
 }
 
 type fakeKnowPostService struct {
-	draftID    uint64
-	createErr  error
-	confirmErr error
-	patchErr   error
-	publishErr error
-	feedResp   service.KnowPostFeedPage
-	feedErr    error
-	mineResp   service.KnowPostFeedPage
-	mineErr    error
-	detailResp service.KnowPostDetail
-	detailErr  error
+	draftID       uint64
+	createErr     error
+	confirmErr    error
+	patchErr      error
+	topErr        error
+	visibilityErr error
+	deleteErr     error
+	publishErr    error
+	feedResp      service.KnowPostFeedPage
+	feedErr       error
+	mineResp      service.KnowPostFeedPage
+	mineErr       error
+	detailResp    service.KnowPostDetail
+	detailErr     error
+	suggestResp   string
+	suggestErr    error
 }
 
 func (s *fakeKnowPostService) CreateDraft(_ context.Context, _ uint64) (uint64, error) {
@@ -452,12 +647,31 @@ func (s *fakeKnowPostService) GetDetail(_ context.Context, _ uint64, _ *uint64) 
 	return s.detailResp, nil
 }
 
+func (s *fakeKnowPostService) SuggestDescription(_ context.Context, _ uint64, _ string) (string, error) {
+	if s.suggestErr != nil {
+		return "", s.suggestErr
+	}
+	return s.suggestResp, nil
+}
+
 func (s *fakeKnowPostService) ConfirmContent(_ context.Context, _ uint64, _ uint64, _ service.KnowPostContentConfirmRequest) error {
 	return s.confirmErr
 }
 
 func (s *fakeKnowPostService) UpdateMetadata(_ context.Context, _ uint64, _ uint64, _ service.KnowPostMetadataPatchRequest) error {
 	return s.patchErr
+}
+
+func (s *fakeKnowPostService) UpdateTop(_ context.Context, _ uint64, _ uint64, _ bool) error {
+	return s.topErr
+}
+
+func (s *fakeKnowPostService) UpdateVisibility(_ context.Context, _ uint64, _ uint64, _ string) error {
+	return s.visibilityErr
+}
+
+func (s *fakeKnowPostService) Delete(_ context.Context, _ uint64, _ uint64) error {
+	return s.deleteErr
 }
 
 func (s *fakeKnowPostService) Publish(_ context.Context, _ uint64, _ uint64) error {

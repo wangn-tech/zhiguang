@@ -18,3 +18,18 @@ type KnowPostPatchRequest struct {
 	IsTop       *bool     `json:"isTop"`
 	Description *string   `json:"description"`
 }
+
+// KnowPostTopPatchRequest 表示置顶状态更新请求。
+type KnowPostTopPatchRequest struct {
+	IsTop *bool `json:"isTop" binding:"required"`
+}
+
+// KnowPostVisibilityPatchRequest 表示可见性更新请求。
+type KnowPostVisibilityPatchRequest struct {
+	Visible *string `json:"visible" binding:"required"`
+}
+
+// KnowPostDescriptionSuggestRequest 表示摘要建议请求。
+type KnowPostDescriptionSuggestRequest struct {
+	Content string `json:"content" binding:"required"`
+}

@@ -230,6 +230,48 @@ func (r *KnowPostRepository) GetDetailByID(ctx context.Context, postID uint64) (
 	return &row, nil
 }
 
+// UpdateTop 按作者归属更新知文置顶状态。
+func (r *KnowPostRepository) UpdateTop(ctx context.Context, postID uint64, creatorID uint64, isTop bool) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&model.KnowPost{}).
+		Where("id = ? AND creator_id = ?", postID, creatorID).
+		Updates(map[string]any{
+			"is_top":      isTop,
+			"update_time": time.Now(),
+		})
+	if result.Error != nil {
+		return false, fmt.Errorf("update knowpost top: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// UpdateVisibility 按作者归属更新知文可见性。
+func (r *KnowPostRepository) UpdateVisibility(ctx context.Context, postID uint64, creatorID uint64, visible string) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&model.KnowPost{}).
+		Where("id = ? AND creator_id = ?", postID, creatorID).
+		Updates(map[string]any{
+			"visible":     visible,
+			"update_time": time.Now(),
+		})
+	if result.Error != nil {
+		return false, fmt.Errorf("update knowpost visibility: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
+// SoftDelete 按作者归属将知文状态更新为 deleted。
+func (r *KnowPostRepository) SoftDelete(ctx context.Context, postID uint64, creatorID uint64) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&model.KnowPost{}).
+		Where("id = ? AND creator_id = ?", postID, creatorID).
+		Updates(map[string]any{
+			"status":      "deleted",
+			"update_time": time.Now(),
+		})
+	if result.Error != nil {
+		return false, fmt.Errorf("soft delete knowpost: %w", result.Error)
+	}
+	return result.RowsAffected > 0, nil
+}
+
 // IsOwnedBy 检查知文是否属于指定用户。
 func (r *KnowPostRepository) IsOwnedBy(ctx context.Context, postID uint64, userID uint64) (bool, error) {
 	var count int64

@@ -250,6 +250,117 @@ func (h *KnowPostHandler) PatchMetadata(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// PatchTop 更新知文置顶状态。
+func (h *KnowPostHandler) PatchTop(c *gin.Context) {
+	userID, err := AuthUserIDFromContext(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	postID, err := parseKnowPostID(c.Param("id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	var req dto.KnowPostTopPatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	if req.IsTop == nil {
+		c.Error(errorsx.New(errorsx.CodeBadRequest, "isTop 必填"))
+		return
+	}
+
+	if err := h.service.UpdateTop(c.Request.Context(), userID, postID, *req.IsTop); err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// PatchVisibility 更新知文可见性。
+func (h *KnowPostHandler) PatchVisibility(c *gin.Context) {
+	userID, err := AuthUserIDFromContext(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	postID, err := parseKnowPostID(c.Param("id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	var req dto.KnowPostVisibilityPatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+	if req.Visible == nil {
+		c.Error(errorsx.New(errorsx.CodeBadRequest, "visible 必填"))
+		return
+	}
+
+	if err := h.service.UpdateVisibility(c.Request.Context(), userID, postID, *req.Visible); err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// Delete 软删除知文。
+func (h *KnowPostHandler) Delete(c *gin.Context) {
+	userID, err := AuthUserIDFromContext(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	postID, err := parseKnowPostID(c.Param("id"))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	if err := h.service.Delete(c.Request.Context(), userID, postID); err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// SuggestDescription 生成摘要建议。
+func (h *KnowPostHandler) SuggestDescription(c *gin.Context) {
+	userID, err := AuthUserIDFromContext(c)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	var req dto.KnowPostDescriptionSuggestRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.Error(err)
+		return
+	}
+
+	description, err := h.service.SuggestDescription(c.Request.Context(), userID, req.Content)
+	if err != nil {
+		c.Error(err)
+		return
+	}
+
+	c.JSON(http.StatusOK, dto.KnowPostDescriptionSuggestResponse{
+		Description: description,
+	})
+}
+
 // Publish 将指定知文发布为公开内容。
 func (h *KnowPostHandler) Publish(c *gin.Context) {
 	userID, err := AuthUserIDFromContext(c)
