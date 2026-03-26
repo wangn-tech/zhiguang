@@ -627,3 +627,246 @@ func TestAuthz_RelationFollowing_AllowsAnonymous(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
 }
+
+func TestAuthz_ActionUnlike_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.POST("/api/v1/action/unlike", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/unlike", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestAuthz_ActionFav_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.POST("/api/v1/action/fav", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/fav", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestAuthz_ActionUnfav_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.POST("/api/v1/action/unfav", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/unfav", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestAuthz_RelationUnfollow_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.POST("/api/v1/relation/unfollow", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/relation/unfollow?toUserId=1002", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestAuthz_RelationStatus_RejectsMissingToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/status", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId=1002", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthz_RelationStatus_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/status", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId=1002", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestAuthz_RelationFollowers_AllowsAnonymous(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/followers", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/followers?userId=1001", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}
+
+func TestAuthz_RelationCounter_RejectsMissingToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/counter", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/counter?userId=1001", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestAuthz_RelationCounter_AllowsValidAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/counter", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/counter?userId=1001", nil)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+}

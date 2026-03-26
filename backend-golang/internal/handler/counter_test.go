@@ -61,3 +61,20 @@ func TestCounterHandler_GetCounts_ServiceError(t *testing.T) {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
 	}
 }
+
+func TestParseMetrics_EmptyInput(t *testing.T) {
+	metrics := parseMetrics("   ")
+	if metrics != nil {
+		t.Fatalf("parseMetrics() = %v, want nil", metrics)
+	}
+}
+
+func TestParseMetrics_TrimAndIgnoreEmpty(t *testing.T) {
+	metrics := parseMetrics(" like, , fav ,  ")
+	if len(metrics) != 2 {
+		t.Fatalf("len(metrics) = %d, want 2", len(metrics))
+	}
+	if metrics[0] != "like" || metrics[1] != "fav" {
+		t.Fatalf("metrics = %v, want [like fav]", metrics)
+	}
+}
