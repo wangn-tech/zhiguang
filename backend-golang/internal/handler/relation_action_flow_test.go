@@ -846,3 +846,94 @@ func TestRelationFlow_FollowingAndFollowers_ConsistentPaginationSemantics(t *tes
 	assertSlice("followingTail", followingTail, []uint64{})
 	assertSlice("followersTail", followersTail, []uint64{})
 }
+
+func TestRelationFlow_StatusMutualTransition(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	svc := newFlowRelationService(map[uint64]service.ProfileResponse{
+		1001: {ID: 1001, Nickname: "user-1001", Avatar: ""},
+		1002: {ID: 1002, Nickname: "user-1002", Avatar: ""},
+	})
+	h := NewRelationHandler(svc)
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		rawUserID := strings.TrimSpace(c.GetHeader("X-User-ID"))
+		if rawUserID != "" {
+			parsed, err := strconv.ParseUint(rawUserID, 10, 64)
+			if err == nil {
+				c.Set("auth_user_id", parsed)
+			}
+		}
+		c.Next()
+	})
+	r.POST("/api/v1/relation/follow", h.Follow)
+	r.POST("/api/v1/relation/unfollow", h.Unfollow)
+	r.GET("/api/v1/relation/status", h.Status)
+
+	postAs := func(userID uint64, path string) bool {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		req.Header.Set("X-User-ID", strconv.FormatUint(userID, 10))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("POST %s by %d status = %d, want %d", path, userID, w.Code, http.StatusOK)
+		}
+		return stringsTrimBody(w.Body.String()) == "true"
+	}
+
+	queryStatusAs := func(fromUserID uint64, toUserID uint64) map[string]any {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId="+strconv.FormatUint(toUserID, 10), nil)
+		req.Header.Set("X-User-ID", strconv.FormatUint(fromUserID, 10))
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("status %d -> %d http status = %d, want %d", fromUserID, toUserID, w.Code, http.StatusOK)
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode status %d -> %d response: %v", fromUserID, toUserID, err)
+		}
+		return resp
+	}
+
+	assertStatus := func(label string, status map[string]any, following bool, followedBy bool, mutual bool) {
+		if got, _ := status["following"].(bool); got != following {
+			t.Fatalf("%s following = %v, want %v", label, got, following)
+		}
+		if got, _ := status["followedBy"].(bool); got != followedBy {
+			t.Fatalf("%s followedBy = %v, want %v", label, got, followedBy)
+		}
+		if got, _ := status["mutual"].(bool); got != mutual {
+			t.Fatalf("%s mutual = %v, want %v", label, got, mutual)
+		}
+	}
+
+	assertStatus("initial 1001->1002", queryStatusAs(1001, 1002), false, false, false)
+	assertStatus("initial 1002->1001", queryStatusAs(1002, 1001), false, false, false)
+
+	if changed := postAs(1001, "/api/v1/relation/follow?toUserId=1002"); !changed {
+		t.Fatal("1001 follow 1002 changed = false, want true")
+	}
+	assertStatus("after one-way follow 1001->1002", queryStatusAs(1001, 1002), true, false, false)
+	assertStatus("after one-way follow 1002->1001", queryStatusAs(1002, 1001), false, true, false)
+
+	if changed := postAs(1002, "/api/v1/relation/follow?toUserId=1001"); !changed {
+		t.Fatal("1002 follow 1001 changed = false, want true")
+	}
+	assertStatus("after mutual follow 1001->1002", queryStatusAs(1001, 1002), true, true, true)
+	assertStatus("after mutual follow 1002->1001", queryStatusAs(1002, 1001), true, true, true)
+
+	if changed := postAs(1002, "/api/v1/relation/unfollow?toUserId=1001"); !changed {
+		t.Fatal("1002 unfollow 1001 changed = false, want true")
+	}
+	assertStatus("after one-side cancel 1001->1002", queryStatusAs(1001, 1002), true, false, false)
+	assertStatus("after one-side cancel 1002->1001", queryStatusAs(1002, 1001), false, true, false)
+
+	if changed := postAs(1001, "/api/v1/relation/unfollow?toUserId=1002"); !changed {
+		t.Fatal("1001 unfollow 1002 changed = false, want true")
+	}
+	assertStatus("after full cancel 1001->1002", queryStatusAs(1001, 1002), false, false, false)
+	assertStatus("after full cancel 1002->1001", queryStatusAs(1002, 1001), false, false, false)
+}
