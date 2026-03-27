@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -977,4 +978,100 @@ func TestAuthz_MixedFlow_PublicReadableAndProtectedStrict(t *testing.T) {
 	if counterAccessW.Code != http.StatusOK {
 		t.Fatalf("counter with access token = %d, want %d", counterAccessW.Code, http.StatusOK)
 	}
+}
+
+func TestAuthz_ProtectedEndpoints_MissingToken_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/status", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.POST("/api/v1/action/like", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/api/v1/counter/:entityType/:entityId", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "relation status", method: http.MethodGet, path: "/api/v1/relation/status?toUserId=1002"},
+		{name: "action like", method: http.MethodPost, path: "/api/v1/action/like"},
+		{name: "counter get", method: http.MethodGet, path: "/api/v1/counter/knowpost/123?metrics=like,fav"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+			}
+			if code := authzErrorCodeFromBody(t, w.Body.Bytes()); code != "INVALID_CREDENTIALS" {
+				t.Fatalf("code = %s, want INVALID_CREDENTIALS", code)
+			}
+		})
+	}
+}
+
+func TestAuthz_ProtectedEndpoints_RefreshToken_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	enforcer, err := NewCasbinEnforcer()
+	if err != nil {
+		t.Fatalf("NewCasbinEnforcer() error = %v", err)
+	}
+
+	r := gin.New()
+	r.Use(ErrorHandler(), Authz(enforcer, "test-secret"))
+	r.GET("/api/v1/relation/status", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.POST("/api/v1/action/like", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/api/v1/counter/:entityType/:entityId", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	pair, err := jwtx.IssueTokenPair(1001, 15*time.Minute, 7*24*time.Hour, "test-secret")
+	if err != nil {
+		t.Fatalf("IssueTokenPair() error = %v", err)
+	}
+
+	testCases := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "relation status", method: http.MethodGet, path: "/api/v1/relation/status?toUserId=1002"},
+		{name: "action like", method: http.MethodPost, path: "/api/v1/action/like"},
+		{name: "counter get", method: http.MethodGet, path: "/api/v1/counter/knowpost/123?metrics=like,fav"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer "+pair.RefreshToken)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+			}
+			if code := authzErrorCodeFromBody(t, w.Body.Bytes()); code != "INVALID_CREDENTIALS" {
+				t.Fatalf("code = %s, want INVALID_CREDENTIALS", code)
+			}
+		})
+	}
+}
+
+func authzErrorCodeFromBody(t *testing.T, body []byte) string {
+	t.Helper()
+	var resp map[string]any
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode authz error body: %v", err)
+	}
+	code, _ := resp["code"].(string)
+	return code
 }
