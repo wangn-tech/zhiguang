@@ -78,3 +78,29 @@ func TestParseMetrics_TrimAndIgnoreEmpty(t *testing.T) {
 		t.Fatalf("metrics = %v, want [like fav]", metrics)
 	}
 }
+
+func TestCounterHandler_GetCounts_ServiceError_Contract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewCounterHandler(&fakeCounterService{countsErr: errorsx.New(errorsx.CodeBadRequest, "entityType/entityId 不能为空")})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/counter/:entityType/:entityId", h.GetCounts)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/counter/knowpost/123", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}

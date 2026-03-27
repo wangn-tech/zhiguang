@@ -265,3 +265,59 @@ func (s *fakeRelationService) Counters(_ context.Context, _ uint64) (service.Rel
 func stringsTrimBody(raw string) string {
 	return strings.TrimSpace(raw)
 }
+
+func TestRelationHandler_Follow_InvalidUser_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/relation/follow", h.Follow)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/relation/follow?toUserId=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Following_InvalidCursor_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/following", h.Following)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001&cursor=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}

@@ -251,3 +251,34 @@ func (s *fakeCounterService) GetCounts(_ context.Context, _ string, _ string, _ 
 func newBadRequestError(message string) error {
 	return errorsx.New(errorsx.CodeBadRequest, message)
 }
+
+func TestActionHandler_InvalidBody_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewActionHandler(&fakeCounterService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/action/like", h.Like)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/like", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
