@@ -425,3 +425,136 @@ func TestRelationHandler_Counter_InvalidUserID_ErrorContract(t *testing.T) {
 		t.Fatalf("code = %s, want BAD_REQUEST", code)
 	}
 }
+
+func TestRelationHandler_Status_InvalidToUserID_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.GET("/api/v1/relation/status", h.Status)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status?toUserId=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Status_MissingToUserID_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.GET("/api/v1/relation/status", h.Status)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/status", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Following_InvalidUserID_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/following", h.Following)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=abc", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Followers_InvalidUserID_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/followers", h.Followers)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/followers?userId=%20", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Counter_MissingUserID_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/counter", h.Counter)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/counter", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}

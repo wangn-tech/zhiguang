@@ -311,3 +311,48 @@ func TestActionHandler_Like_MissingAuth_ErrorContract(t *testing.T) {
 		t.Fatalf("code = %s, want INVALID_CREDENTIALS", code)
 	}
 }
+
+func TestActionHandler_AllActions_MissingAuth_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewActionHandler(&fakeCounterService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.POST("/api/v1/action/like", h.Like)
+	r.POST("/api/v1/action/unlike", h.Unlike)
+	r.POST("/api/v1/action/fav", h.Fav)
+	r.POST("/api/v1/action/unfav", h.Unfav)
+
+	payload, _ := json.Marshal(map[string]any{"entityType": "knowpost", "entityId": "123"})
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{name: "like", path: "/api/v1/action/like"},
+		{name: "unlike", path: "/api/v1/action/unlike"},
+		{name: "fav", path: "/api/v1/action/fav"},
+		{name: "unfav", path: "/api/v1/action/unfav"},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, bytes.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+			}
+			var resp map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if code, _ := resp["code"].(string); code != "INVALID_CREDENTIALS" {
+				t.Fatalf("code = %s, want INVALID_CREDENTIALS", code)
+			}
+		})
+	}
+}
