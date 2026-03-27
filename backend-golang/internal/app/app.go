@@ -27,6 +27,10 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	knowPostRepo := repository.NewKnowPostRepository(db)
 	counterRepo := repository.NewCounterRepository(redisClient)
 	relationRepo := repository.NewRelationRepository(redisClient)
+	outboxRepo := repository.NewOutboxRepository(db)
+
+	relationOutboxPublisher := service.NewRelationOutboxEventPublisher(outboxRepo)
+	counterOutboxPublisher := service.NewCounterOutboxEventPublisher(outboxRepo)
 
 	authService := service.NewAuthService(userRepo, loginLogRepo, redisClient, service.AuthOptions{
 		TokenSecret:     cfg.Auth.JWT.Secret,
@@ -37,8 +41,8 @@ func NewServer(cfg *config.Config) (*http.Server, error) {
 	objectStorageService := service.NewObjectStorageService(cfg.OSS)
 	storagePresignService := service.NewStoragePresignService(objectStorageService, knowPostRepo, cfg.OSS.PresignExpireSeconds)
 	knowPostService := service.NewKnowPostService(knowPostRepo, cfg.OSS)
-	counterService := service.NewCounterService(counterRepo)
-	relationService := service.NewRelationService(relationRepo, userRepo, knowPostRepo, counterRepo)
+	counterService := service.NewCounterService(counterRepo, service.WithCounterEventPublisher(counterOutboxPublisher))
+	relationService := service.NewRelationService(relationRepo, userRepo, knowPostRepo, counterRepo, service.WithRelationEventPublisher(relationOutboxPublisher))
 
 	healthHandler := handler.NewHealthHandler([]handler.Checker{
 		store.NewMySQLChecker(db),
