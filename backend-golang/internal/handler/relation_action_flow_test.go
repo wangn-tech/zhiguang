@@ -744,3 +744,105 @@ func TestRelationFlow_FollowersPaginationBoundaryWithCursorOffsetLimit(t *testin
 		t.Fatalf("emptyOffsetPage = %v, want []", emptyOffsetPage)
 	}
 }
+
+func TestRelationFlow_FollowingAndFollowers_ConsistentPaginationSemantics(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	svc := newFlowRelationService(map[uint64]service.ProfileResponse{
+		1001: {ID: 1001, Nickname: "user-1001", Avatar: ""},
+		1002: {ID: 1002, Nickname: "user-1002", Avatar: ""},
+		1003: {ID: 1003, Nickname: "user-1003", Avatar: ""},
+		1004: {ID: 1004, Nickname: "user-1004", Avatar: ""},
+		1005: {ID: 1005, Nickname: "user-1005", Avatar: ""},
+		1006: {ID: 1006, Nickname: "user-1006", Avatar: ""},
+		1102: {ID: 1102, Nickname: "user-1102", Avatar: ""},
+		1103: {ID: 1103, Nickname: "user-1103", Avatar: ""},
+		1104: {ID: 1104, Nickname: "user-1104", Avatar: ""},
+		1105: {ID: 1105, Nickname: "user-1105", Avatar: ""},
+		1106: {ID: 1106, Nickname: "user-1106", Avatar: ""},
+	})
+	h := NewRelationHandler(svc)
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/relation/follow", h.Follow)
+	r.GET("/api/v1/relation/following", h.Following)
+	r.GET("/api/v1/relation/followers", h.Followers)
+
+	for _, toUserID := range []uint64{1002, 1003, 1004, 1005, 1006} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/relation/follow?toUserId="+strconv.FormatUint(toUserID, 10), nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("follow %d status = %d, want %d", toUserID, w.Code, http.StatusOK)
+		}
+	}
+	for _, fromUserID := range []uint64{1102, 1103, 1104, 1105, 1106} {
+		changed, err := svc.Follow(context.Background(), fromUserID, 1001)
+		if err != nil {
+			t.Fatalf("seed follower %d -> 1001 error: %v", fromUserID, err)
+		}
+		if !changed {
+			t.Fatalf("seed follower %d -> 1001 changed = false, want true", fromUserID)
+		}
+	}
+
+	queryIDs := func(path string) []uint64 {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, w.Code, http.StatusOK)
+		}
+		var resp []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode %s response: %v", path, err)
+		}
+		ids := make([]uint64, 0, len(resp))
+		for _, item := range resp {
+			ids = append(ids, uint64(item["id"].(float64)))
+		}
+		return ids
+	}
+
+	assertSlice := func(label string, got []uint64, want []uint64) {
+		if len(got) != len(want) {
+			t.Fatalf("%s len = %d, want %d; got=%v want=%v", label, len(got), len(want), got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("%s = %v, want %v", label, got, want)
+			}
+		}
+	}
+
+	followingFirst := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=0")
+	followersFirst := queryIDs("/api/v1/relation/followers?userId=1001&limit=2&offset=0")
+	assertSlice("followingFirst", followingFirst, []uint64{1006, 1005})
+	assertSlice("followersFirst", followersFirst, []uint64{1106, 1105})
+
+	followingCursor := svc.snapshotScore(1001, 1005)
+	followersCursor := svc.snapshotScore(1105, 1001)
+
+	followingSecond := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=0&cursor=" + strconv.FormatInt(followingCursor, 10))
+	followersSecond := queryIDs("/api/v1/relation/followers?userId=1001&limit=2&offset=0&cursor=" + strconv.FormatInt(followersCursor, 10))
+	assertSlice("followingSecond", followingSecond, []uint64{1004, 1003})
+	assertSlice("followersSecond", followersSecond, []uint64{1104, 1103})
+
+	followingCursorOffset := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=1&cursor=" + strconv.FormatInt(followingCursor, 10))
+	followersCursorOffset := queryIDs("/api/v1/relation/followers?userId=1001&limit=2&offset=1&cursor=" + strconv.FormatInt(followersCursor, 10))
+	assertSlice("followingCursorOffset", followingCursorOffset, []uint64{1003, 1002})
+	assertSlice("followersCursorOffset", followersCursorOffset, []uint64{1103, 1102})
+
+	followingTailCursor := svc.snapshotScore(1001, 1002)
+	followersTailCursor := svc.snapshotScore(1102, 1001)
+
+	followingTail := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=0&cursor=" + strconv.FormatInt(followingTailCursor, 10))
+	followersTail := queryIDs("/api/v1/relation/followers?userId=1001&limit=2&offset=0&cursor=" + strconv.FormatInt(followersTailCursor, 10))
+	assertSlice("followingTail", followingTail, []uint64{})
+	assertSlice("followersTail", followersTail, []uint64{})
+}
