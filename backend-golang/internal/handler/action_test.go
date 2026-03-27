@@ -282,3 +282,32 @@ func TestActionHandler_InvalidBody_ErrorContract(t *testing.T) {
 		t.Fatalf("code = %s, want BAD_REQUEST", code)
 	}
 }
+
+func TestActionHandler_Like_MissingAuth_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewActionHandler(&fakeCounterService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.POST("/api/v1/action/like", h.Like)
+
+	body := map[string]any{"entityType": "knowpost", "entityId": "123"}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/action/like", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "INVALID_CREDENTIALS" {
+		t.Fatalf("code = %s, want INVALID_CREDENTIALS", code)
+	}
+}

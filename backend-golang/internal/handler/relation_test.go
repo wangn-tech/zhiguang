@@ -321,3 +321,107 @@ func TestRelationHandler_Following_InvalidCursor_ErrorContract(t *testing.T) {
 		t.Fatalf("code = %s, want BAD_REQUEST", code)
 	}
 }
+
+func TestRelationHandler_Follow_MissingAuth_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.POST("/api/v1/relation/follow", h.Follow)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/relation/follow?toUserId=1002", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "INVALID_CREDENTIALS" {
+		t.Fatalf("code = %s, want INVALID_CREDENTIALS", code)
+	}
+}
+
+func TestRelationHandler_Following_InvalidLimit_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/following", h.Following)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001&limit=-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Following_InvalidOffset_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/following", h.Following)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/following?userId=1001&offset=-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Counter_InvalidUserID_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/counter", h.Counter)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/counter?userId=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
