@@ -937,3 +937,99 @@ func TestRelationFlow_StatusMutualTransition(t *testing.T) {
 	assertStatus("after full cancel 1001->1002", queryStatusAs(1001, 1002), false, false, false)
 	assertStatus("after full cancel 1002->1001", queryStatusAs(1002, 1001), false, false, false)
 }
+
+func TestRelationFlow_CounterReflectsFollowUnfollowChanges(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	svc := newFlowRelationService(map[uint64]service.ProfileResponse{
+		1001: {ID: 1001, Nickname: "user-1001", Avatar: ""},
+		1002: {ID: 1002, Nickname: "user-1002", Avatar: ""},
+		1003: {ID: 1003, Nickname: "user-1003", Avatar: ""},
+	})
+	h := NewRelationHandler(svc)
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/relation/follow", h.Follow)
+	r.POST("/api/v1/relation/unfollow", h.Unfollow)
+	r.GET("/api/v1/relation/counter", h.Counter)
+
+	post := func(path string) bool {
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, w.Code, http.StatusOK)
+		}
+		return stringsTrimBody(w.Body.String()) == "true"
+	}
+
+	queryCounter := func(userID uint64) map[string]any {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/counter?userId="+strconv.FormatUint(userID, 10), nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("counter %d status = %d, want %d", userID, w.Code, http.StatusOK)
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode counter %d response: %v", userID, err)
+		}
+		return resp
+	}
+
+	assertCounter := func(userID uint64, wantFollowings int64, wantFollowers int64) {
+		counter := queryCounter(userID)
+		if got := int64(counter["followings"].(float64)); got != wantFollowings {
+			t.Fatalf("user %d followings = %d, want %d", userID, got, wantFollowings)
+		}
+		if got := int64(counter["followers"].(float64)); got != wantFollowers {
+			t.Fatalf("user %d followers = %d, want %d", userID, got, wantFollowers)
+		}
+	}
+
+	assertCounter(1001, 0, 0)
+	assertCounter(1002, 0, 0)
+	assertCounter(1003, 0, 0)
+
+	if changed := post("/api/v1/relation/follow?toUserId=1002"); !changed {
+		t.Fatal("first follow 1002 changed = false, want true")
+	}
+	assertCounter(1001, 1, 0)
+	assertCounter(1002, 0, 1)
+	assertCounter(1003, 0, 0)
+
+	if changed := post("/api/v1/relation/follow?toUserId=1002"); changed {
+		t.Fatal("second follow 1002 changed = true, want false")
+	}
+	assertCounter(1001, 1, 0)
+	assertCounter(1002, 0, 1)
+
+	if changed := post("/api/v1/relation/follow?toUserId=1003"); !changed {
+		t.Fatal("first follow 1003 changed = false, want true")
+	}
+	assertCounter(1001, 2, 0)
+	assertCounter(1003, 0, 1)
+
+	if changed := post("/api/v1/relation/unfollow?toUserId=1002"); !changed {
+		t.Fatal("first unfollow 1002 changed = false, want true")
+	}
+	assertCounter(1001, 1, 0)
+	assertCounter(1002, 0, 0)
+
+	if changed := post("/api/v1/relation/unfollow?toUserId=1002"); changed {
+		t.Fatal("second unfollow 1002 changed = true, want false")
+	}
+	assertCounter(1001, 1, 0)
+	assertCounter(1002, 0, 0)
+
+	if changed := post("/api/v1/relation/unfollow?toUserId=1003"); !changed {
+		t.Fatal("first unfollow 1003 changed = false, want true")
+	}
+	assertCounter(1001, 0, 0)
+	assertCounter(1003, 0, 0)
+}
