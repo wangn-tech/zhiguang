@@ -558,3 +558,78 @@ func TestRelationHandler_Counter_MissingUserID_ErrorContract(t *testing.T) {
 		t.Fatalf("code = %s, want BAD_REQUEST", code)
 	}
 }
+
+func TestRelationHandler_Followers_InvalidCursor_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/followers", h.Followers)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/followers?userId=1001&cursor=0", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Followers_InvalidLimit_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/followers", h.Followers)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/followers?userId=1001&limit=-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
+
+func TestRelationHandler_Followers_InvalidOffset_ErrorContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	h := NewRelationHandler(&fakeRelationService{})
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.GET("/api/v1/relation/followers", h.Followers)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/relation/followers?userId=1001&offset=-1", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusBadRequest)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if code, _ := resp["code"].(string); code != "BAD_REQUEST" {
+		t.Fatalf("code = %s, want BAD_REQUEST", code)
+	}
+}
