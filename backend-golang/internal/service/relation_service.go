@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 	"zhiguang/internal/repository"
 	"zhiguang/pkg/errorsx"
 )
@@ -32,16 +33,44 @@ type RelationCounters struct {
 	FavedPosts int64
 }
 
+// RelationServiceOption 负责扩展 RelationService 的可选能力。
+type RelationServiceOption func(*relationService)
+
+// WithRelationEventPublisher 注入关系事件发布器。
+func WithRelationEventPublisher(publisher RelationEventPublisher) RelationServiceOption {
+	return func(s *relationService) {
+		if publisher != nil {
+			s.relationEvents = publisher
+		}
+	}
+}
+
 type relationService struct {
-	relations *repository.RelationRepository
-	users     *repository.UserRepository
-	knowposts *repository.KnowPostRepository
-	counters  *repository.CounterRepository
+	relations      *repository.RelationRepository
+	users          *repository.UserRepository
+	knowposts      *repository.KnowPostRepository
+	counters       *repository.CounterRepository
+	relationEvents RelationEventPublisher
 }
 
 // NewRelationService 创建 RelationService。
-func NewRelationService(relations *repository.RelationRepository, users *repository.UserRepository, knowposts *repository.KnowPostRepository, counters *repository.CounterRepository) RelationService {
-	return &relationService{relations: relations, users: users, knowposts: knowposts, counters: counters}
+func NewRelationService(relations *repository.RelationRepository, users *repository.UserRepository, knowposts *repository.KnowPostRepository, counters *repository.CounterRepository, opts ...RelationServiceOption) RelationService {
+	svc := &relationService{
+		relations:      relations,
+		users:          users,
+		knowposts:      knowposts,
+		counters:       counters,
+		relationEvents: NopRelationEventPublisher{},
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(svc)
+		}
+	}
+	if svc.relationEvents == nil {
+		svc.relationEvents = NopRelationEventPublisher{}
+	}
+	return svc
 }
 
 // Follow 创建关注关系。
@@ -49,7 +78,12 @@ func (s *relationService) Follow(ctx context.Context, fromUserID uint64, toUserI
 	if err := validateRelationUsers(fromUserID, toUserID); err != nil {
 		return false, err
 	}
-	return s.relations.Follow(ctx, fromUserID, toUserID)
+	changed, err := s.relations.Follow(ctx, fromUserID, toUserID)
+	if err != nil {
+		return false, err
+	}
+	s.emitRelationChange(ctx, RelationChangeActionFollow, fromUserID, toUserID, changed)
+	return changed, nil
 }
 
 // Unfollow 删除关注关系。
@@ -57,7 +91,12 @@ func (s *relationService) Unfollow(ctx context.Context, fromUserID uint64, toUse
 	if err := validateRelationUsers(fromUserID, toUserID); err != nil {
 		return false, err
 	}
-	return s.relations.Unfollow(ctx, fromUserID, toUserID)
+	changed, err := s.relations.Unfollow(ctx, fromUserID, toUserID)
+	if err != nil {
+		return false, err
+	}
+	s.emitRelationChange(ctx, RelationChangeActionUnfollow, fromUserID, toUserID, changed)
+	return changed, nil
 }
 
 // Status 查询双方关注关系。
@@ -139,6 +178,18 @@ func (s *relationService) Counters(ctx context.Context, userID uint64) (Relation
 		LikedPosts: likedPosts,
 		FavedPosts: favedPosts,
 	}, nil
+}
+
+func (s *relationService) emitRelationChange(ctx context.Context, action RelationChangeAction, fromUserID uint64, toUserID uint64, changed bool) {
+	if !changed || s.relationEvents == nil {
+		return
+	}
+	_ = s.relationEvents.PublishRelationChange(ctx, RelationChangeEvent{
+		Action:     action,
+		FromUserID: fromUserID,
+		ToUserID:   toUserID,
+		OccurredAt: time.Now().UTC(),
+	})
 }
 
 func (s *relationService) loadProfilesByIDs(ctx context.Context, ids []uint64) ([]ProfileResponse, error) {

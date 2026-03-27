@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 	"zhiguang/internal/repository"
 	"zhiguang/pkg/errorsx"
 )
@@ -29,13 +30,35 @@ type ActionResult struct {
 	Active  bool
 }
 
+// CounterServiceOption 负责扩展 CounterService 的可选能力。
+type CounterServiceOption func(*counterService)
+
+// WithCounterEventPublisher 注入互动行为事件发布器。
+func WithCounterEventPublisher(publisher CounterEventPublisher) CounterServiceOption {
+	return func(s *counterService) {
+		if publisher != nil {
+			s.counterEvents = publisher
+		}
+	}
+}
+
 type counterService struct {
-	repo *repository.CounterRepository
+	repo          *repository.CounterRepository
+	counterEvents CounterEventPublisher
 }
 
 // NewCounterService 创建 CounterService。
-func NewCounterService(repo *repository.CounterRepository) CounterService {
-	return &counterService{repo: repo}
+func NewCounterService(repo *repository.CounterRepository, opts ...CounterServiceOption) CounterService {
+	svc := &counterService{repo: repo, counterEvents: NopCounterEventPublisher{}}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(svc)
+		}
+	}
+	if svc.counterEvents == nil {
+		svc.counterEvents = NopCounterEventPublisher{}
+	}
+	return svc
 }
 
 // Like 执行点赞操作并返回当前点赞状态。
@@ -94,6 +117,7 @@ func (s *counterService) activate(ctx context.Context, userID uint64, entityType
 	if err != nil {
 		return ActionResult{}, err
 	}
+	s.emitCounterActionChange(ctx, CounterActionOperationActivate, metric, normalizedType, normalizedID, userID, changed, active)
 	return ActionResult{Changed: changed, Active: active}, nil
 }
 
@@ -114,7 +138,23 @@ func (s *counterService) deactivate(ctx context.Context, userID uint64, entityTy
 	if err != nil {
 		return ActionResult{}, err
 	}
+	s.emitCounterActionChange(ctx, CounterActionOperationDeactivate, metric, normalizedType, normalizedID, userID, changed, active)
 	return ActionResult{Changed: changed, Active: active}, nil
+}
+
+func (s *counterService) emitCounterActionChange(ctx context.Context, operation CounterActionOperation, metric string, entityType string, entityID string, userID uint64, changed bool, active bool) {
+	if !changed || s.counterEvents == nil {
+		return
+	}
+	_ = s.counterEvents.PublishCounterActionChange(ctx, CounterActionChangeEvent{
+		Operation:  operation,
+		Metric:     metric,
+		EntityType: entityType,
+		EntityID:   entityID,
+		UserID:     userID,
+		Active:     active,
+		OccurredAt: time.Now().UTC(),
+	})
 }
 
 func normalizeCounterEntity(entityType string, entityID string) (string, string, error) {
