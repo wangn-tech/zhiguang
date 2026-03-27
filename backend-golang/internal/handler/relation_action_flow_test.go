@@ -594,3 +594,80 @@ func (s *flowRelationService) listProfiles(entries map[uint64]int64, limit int, 
 	}
 	return result
 }
+
+func TestRelationFlow_FollowingPaginationBoundaryWithCursorOffsetLimit(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	svc := newFlowRelationService(map[uint64]service.ProfileResponse{
+		1001: {ID: 1001, Nickname: "user-1001", Avatar: ""},
+		1002: {ID: 1002, Nickname: "user-1002", Avatar: ""},
+		1003: {ID: 1003, Nickname: "user-1003", Avatar: ""},
+		1004: {ID: 1004, Nickname: "user-1004", Avatar: ""},
+		1005: {ID: 1005, Nickname: "user-1005", Avatar: ""},
+		1006: {ID: 1006, Nickname: "user-1006", Avatar: ""},
+	})
+	h := NewRelationHandler(svc)
+
+	r := gin.New()
+	r.Use(middleware.ErrorHandler())
+	r.Use(func(c *gin.Context) {
+		c.Set("auth_user_id", uint64(1001))
+		c.Next()
+	})
+	r.POST("/api/v1/relation/follow", h.Follow)
+	r.GET("/api/v1/relation/following", h.Following)
+
+	for _, toUserID := range []uint64{1002, 1003, 1004, 1005, 1006} {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/relation/follow?toUserId="+strconv.FormatUint(toUserID, 10), nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("follow %d status = %d, want %d", toUserID, w.Code, http.StatusOK)
+		}
+	}
+
+	queryIDs := func(path string) []uint64 {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want %d", path, w.Code, http.StatusOK)
+		}
+		var resp []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("decode %s response: %v", path, err)
+		}
+		ids := make([]uint64, 0, len(resp))
+		for _, item := range resp {
+			ids = append(ids, uint64(item["id"].(float64)))
+		}
+		return ids
+	}
+
+	firstPage := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=0")
+	if len(firstPage) != 2 || firstPage[0] != 1006 || firstPage[1] != 1005 {
+		t.Fatalf("firstPage = %v, want [1006 1005]", firstPage)
+	}
+
+	cursor1005 := svc.snapshotScore(1001, 1005)
+	secondPage := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=0&cursor=" + strconv.FormatInt(cursor1005, 10))
+	if len(secondPage) != 2 || secondPage[0] != 1004 || secondPage[1] != 1003 {
+		t.Fatalf("secondPage = %v, want [1004 1003]", secondPage)
+	}
+
+	cursorOffsetPage := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=1&cursor=" + strconv.FormatInt(cursor1005, 10))
+	if len(cursorOffsetPage) != 2 || cursorOffsetPage[0] != 1003 || cursorOffsetPage[1] != 1002 {
+		t.Fatalf("cursorOffsetPage = %v, want [1003 1002]", cursorOffsetPage)
+	}
+
+	cursor1002 := svc.snapshotScore(1001, 1002)
+	emptyTailPage := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=0&cursor=" + strconv.FormatInt(cursor1002, 10))
+	if len(emptyTailPage) != 0 {
+		t.Fatalf("emptyTailPage = %v, want []", emptyTailPage)
+	}
+
+	emptyOffsetPage := queryIDs("/api/v1/relation/following?userId=1001&limit=2&offset=10")
+	if len(emptyOffsetPage) != 0 {
+		t.Fatalf("emptyOffsetPage = %v, want []", emptyOffsetPage)
+	}
+}
