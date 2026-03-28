@@ -169,3 +169,68 @@ func TestLoadFromPath_OSSConfig(t *testing.T) {
 		t.Fatalf("OSS.PresignExpireSeconds = %d, want 900", cfg.OSS.PresignExpireSeconds)
 	}
 }
+
+func TestLoadFromPath_OutboxConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`outbox:
+  relay:
+    batch_size: 88
+    sink: "kafka"
+  kafka:
+    topic_default: "outbox.default"
+    aggregate_topics:
+      relation: "outbox.relation"
+      counter.knowpost: "outbox.counter"
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error = %v", err)
+	}
+
+	if cfg.Outbox.Relay.BatchSize != 88 {
+		t.Fatalf("Outbox.Relay.BatchSize = %d, want 88", cfg.Outbox.Relay.BatchSize)
+	}
+	if cfg.Outbox.Relay.Sink != "kafka" {
+		t.Fatalf("Outbox.Relay.Sink = %s, want kafka", cfg.Outbox.Relay.Sink)
+	}
+	if cfg.Outbox.Kafka.TopicDefault != "outbox.default" {
+		t.Fatalf("Outbox.Kafka.TopicDefault = %s, want outbox.default", cfg.Outbox.Kafka.TopicDefault)
+	}
+	if cfg.Outbox.Kafka.AggregateTopics["relation"] != "outbox.relation" {
+		t.Fatalf("Outbox.Kafka.AggregateTopics[relation] = %s, want outbox.relation", cfg.Outbox.Kafka.AggregateTopics["relation"])
+	}
+}
+
+func TestLoadFromPath_OutboxDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	content := []byte(`server:
+  port: "7070"
+`)
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	cfg, err := LoadFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadFromPath() error = %v", err)
+	}
+
+	if cfg.Outbox.Relay.BatchSize != 100 {
+		t.Fatalf("Outbox.Relay.BatchSize = %d, want 100", cfg.Outbox.Relay.BatchSize)
+	}
+	if cfg.Outbox.Relay.Sink != "stdout" {
+		t.Fatalf("Outbox.Relay.Sink = %s, want stdout", cfg.Outbox.Relay.Sink)
+	}
+	if cfg.Outbox.Kafka.TopicDefault != "outbox.events" {
+		t.Fatalf("Outbox.Kafka.TopicDefault = %s, want outbox.events", cfg.Outbox.Kafka.TopicDefault)
+	}
+	if len(cfg.Outbox.Kafka.AggregateTopics) != 0 {
+		t.Fatalf("len(Outbox.Kafka.AggregateTopics) = %d, want 0", len(cfg.Outbox.Kafka.AggregateTopics))
+	}
+}

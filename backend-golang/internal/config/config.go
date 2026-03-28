@@ -16,6 +16,7 @@ type Config struct {
 	Redis  RedisConfig
 	Auth   AuthConfig
 	OSS    OSSConfig
+	Outbox OutboxConfig
 }
 
 // ServerConfig 包含 HTTP server 相关配置。
@@ -68,6 +69,24 @@ type OSSConfig struct {
 	PublicDomain         string
 	Folder               string
 	PresignExpireSeconds int
+}
+
+// OutboxConfig 包含 outbox relay 相关配置。
+type OutboxConfig struct {
+	Relay OutboxRelayConfig
+	Kafka OutboxKafkaConfig
+}
+
+// OutboxRelayConfig 包含 relay 执行配置。
+type OutboxRelayConfig struct {
+	BatchSize int
+	Sink      string
+}
+
+// OutboxKafkaConfig 包含 Kafka sink 相关配置。
+type OutboxKafkaConfig struct {
+	TopicDefault    string
+	AggregateTopics map[string]string
 }
 
 const defaultConfigPath = "configs/config.yaml"
@@ -128,6 +147,16 @@ func LoadFromPath(configPath string) (*Config, error) {
 			Folder:               v.GetString("oss.folder"),
 			PresignExpireSeconds: v.GetInt("oss.presign_expire_seconds"),
 		},
+		Outbox: OutboxConfig{
+			Relay: OutboxRelayConfig{
+				BatchSize: v.GetInt("outbox.relay.batch_size"),
+				Sink:      v.GetString("outbox.relay.sink"),
+			},
+			Kafka: OutboxKafkaConfig{
+				TopicDefault:    v.GetString("outbox.kafka.topic_default"),
+				AggregateTopics: v.GetStringMapString("outbox.kafka.aggregate_topics"),
+			},
+		},
 	}
 
 	return cfg, nil
@@ -162,6 +191,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("oss.public_domain", "")
 	v.SetDefault("oss.folder", "avatars")
 	v.SetDefault("oss.presign_expire_seconds", 600)
+
+	v.SetDefault("outbox.relay.batch_size", 100)
+	v.SetDefault("outbox.relay.sink", "stdout")
+	v.SetDefault("outbox.kafka.topic_default", "outbox.events")
+	v.SetDefault("outbox.kafka.aggregate_topics", map[string]string{})
 }
 
 func readConfigFile(v *viper.Viper, configPath string) error {

@@ -33,3 +33,11 @@ oss:
   public_domain: ""
   folder: "avatars"
   presign_expire_seconds: 600
+
+outbox:
+  relay:
+    batch_size: 100
+    sink: "stdout"
+  kafka:
+    topic_default: "outbox.events"
+    aggregate_topics: {}
