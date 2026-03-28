@@ -21,7 +21,7 @@ type OutboxCreateParams struct {
 	Payload       string
 }
 
-// OutboxRepository 负责 outbox 表写入能力。
+// OutboxRepository 负责 outbox 表读写能力。
 type OutboxRepository struct {
 	db *gorm.DB
 }
@@ -53,6 +53,23 @@ func (r *OutboxRepository) Create(ctx context.Context, params OutboxCreateParams
 		return fmt.Errorf("create outbox event: %w", err)
 	}
 	return nil
+}
+
+// ListAfterID 按主键顺序读取 id 大于 afterID 的 outbox 事件。
+func (r *OutboxRepository) ListAfterID(ctx context.Context, afterID uint64, limit int) ([]model.OutboxEvent, error) {
+	if limit <= 0 {
+		return []model.OutboxEvent{}, nil
+	}
+	rows := make([]model.OutboxEvent, 0, limit)
+	err := r.db.WithContext(ctx).
+		Where("id > ?", afterID).
+		Order("id ASC").
+		Limit(limit).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list outbox events after id: %w", err)
+	}
+	return rows, nil
 }
 
 func nextOutboxID(now time.Time) uint64 {
