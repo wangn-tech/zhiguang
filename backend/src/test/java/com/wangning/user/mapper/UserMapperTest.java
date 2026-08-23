@@ -177,6 +177,24 @@ class UserMapperTest {
     }
 
     @Test
+    void shouldUpdateAvatarAndPreserveOtherUserFields() {
+        User user = completeUser("13800138015", "avatar@example.com", "zg_avatar");
+        userMapper.insert(user);
+        String newAvatar = "https://static.example.com/avatars/%d/new.png".formatted(user.getId());
+
+        int affectedRows = userMapper.updateAvatar(user.getId(), newAvatar);
+        User stored = userMapper.findById(user.getId());
+
+        assertThat(affectedRows).isEqualTo(1);
+        assertThat(stored.getAvatar()).isEqualTo(newAvatar);
+        assertThat(stored.getPhone()).isEqualTo(user.getPhone());
+        assertThat(stored.getEmail()).isEqualTo(user.getEmail());
+        assertThat(stored.getPasswordHash()).isEqualTo(user.getPasswordHash());
+        assertThat(stored.getNickname()).isEqualTo(user.getNickname());
+        assertThat(userMapper.updateAvatar(Long.MAX_VALUE, newAvatar)).isZero();
+    }
+
+    @Test
     void shouldRejectDuplicateZgIdDuringProfileUpdate() {
         User first = completeUser("13800138013", null, "zg_taken");
         User second = completeUser("13800138014", null, "zg_available");

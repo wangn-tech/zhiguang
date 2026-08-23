@@ -7,6 +7,9 @@ import com.wangning.profile.api.dto.ProfilePatchRequest;
 import com.wangning.profile.api.dto.ProfileResponse;
 import com.wangning.profile.model.Gender;
 import com.wangning.profile.service.impl.ProfileServiceImpl;
+import com.wangning.storage.ObjectStorageService;
+import com.wangning.storage.aliyun.OssProperties;
+import com.wangning.storage.model.StoredObject;
 import com.wangning.user.domain.User;
 import com.wangning.user.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,15 +18,21 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.io.InputStream;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,11 +42,22 @@ class ProfileServiceImplTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private ObjectProvider<ObjectStorageService> objectStorageServiceProvider;
+
+    @Mock
+    private ObjectStorageService objectStorageService;
+
     private ProfileServiceImpl profileService;
 
     @BeforeEach
     void setUp() {
-        profileService = new ProfileServiceImpl(userMapper, new ObjectMapper());
+        profileService = new ProfileServiceImpl(
+                userMapper,
+                new ObjectMapper(),
+                new AvatarFileValidator(new OssProperties()),
+                objectStorageServiceProvider
+        );
     }
 
     @Test
@@ -263,6 +283,129 @@ class ProfileServiceImplTest {
         verify(userMapper, never()).findById(anyLong());
     }
 
+    @Test
+    void shouldUploadAvatarAndReturnLatestProfile() {
+        byte[] content = pngBytes();
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "client-name.png",
+                "image/png",
+                content
+        );
+        User updated = currentUser();
+        updated.setAvatar("https://static.example.com/avatars/1/new.png");
+        when(userMapper.findById(1L)).thenReturn(currentUser(), updated);
+        when(objectStorageServiceProvider.getIfAvailable()).thenReturn(objectStorageService);
+        when(objectStorageService.upload(
+                anyString(),
+                eq("image/png"),
+                eq((long) content.length),
+                any(InputStream.class)
+        )).thenAnswer(invocation -> new StoredObject(
+                invocation.getArgument(0),
+                updated.getAvatar(),
+                "etag"
+        ));
+        when(userMapper.updateAvatar(1L, updated.getAvatar())).thenReturn(1);
+
+        ProfileResponse response = profileService.uploadAvatar(1L, file);
+
+        ArgumentCaptor<String> objectKeyCaptor = ArgumentCaptor.forClass(String.class);
+        verify(objectStorageService).upload(
+                objectKeyCaptor.capture(),
+                eq("image/png"),
+                eq((long) content.length),
+                any(InputStream.class)
+        );
+        assertThat(objectKeyCaptor.getValue())
+                .startsWith("avatars/1/")
+                .endsWith(".png");
+        verify(userMapper).updateAvatar(1L, updated.getAvatar());
+        verify(objectStorageService, never()).delete(anyString());
+        assertThat(response.avatar()).isEqualTo(updated.getAvatar());
+    }
+
+    @Test
+    void shouldRejectAvatarUploadWhenStorageIsDisabled() {
+        when(userMapper.findById(1L)).thenReturn(currentUser());
+
+        assertErrorCode(
+                () -> profileService.uploadAvatar(1L, pngFile()),
+                ErrorCode.STORAGE_CONFIGURATION_ERROR
+        );
+        verify(userMapper, never()).updateAvatar(anyLong(), any());
+    }
+
+    @Test
+    void shouldDeleteNewAvatarWhenDatabaseUpdateHasUnexpectedRowCount() {
+        StoredObject storedObject = new StoredObject(
+                "avatars/1/new.png",
+                "https://static.example.com/avatars/1/new.png",
+                "etag"
+        );
+        when(userMapper.findById(1L)).thenReturn(currentUser());
+        when(objectStorageServiceProvider.getIfAvailable()).thenReturn(objectStorageService);
+        when(objectStorageService.upload(
+                anyString(),
+                eq("image/png"),
+                anyLong(),
+                any(InputStream.class)
+        )).thenReturn(storedObject);
+        when(userMapper.updateAvatar(1L, storedObject.publicUrl())).thenReturn(0, 2);
+
+        assertErrorCode(
+                () -> profileService.uploadAvatar(1L, pngFile()),
+                ErrorCode.RESOURCE_NOT_FOUND
+        );
+        assertErrorCode(
+                () -> profileService.uploadAvatar(1L, pngFile()),
+                ErrorCode.INTERNAL_ERROR
+        );
+
+        verify(objectStorageService, times(2)).delete(storedObject.objectKey());
+    }
+
+    @Test
+    void shouldDeleteNewAvatarAndRethrowDatabaseFailure() {
+        StoredObject storedObject = new StoredObject(
+                "avatars/1/new.png",
+                "https://static.example.com/avatars/1/new.png",
+                "etag"
+        );
+        IllegalStateException databaseFailure = new IllegalStateException("database failed");
+        when(userMapper.findById(1L)).thenReturn(currentUser());
+        when(objectStorageServiceProvider.getIfAvailable()).thenReturn(objectStorageService);
+        when(objectStorageService.upload(
+                anyString(),
+                eq("image/png"),
+                anyLong(),
+                any(InputStream.class)
+        )).thenReturn(storedObject);
+        when(userMapper.updateAvatar(1L, storedObject.publicUrl())).thenThrow(databaseFailure);
+
+        assertThatThrownBy(() -> profileService.uploadAvatar(1L, pngFile()))
+                .isSameAs(databaseFailure);
+        verify(objectStorageService).delete(storedObject.objectKey());
+    }
+
+    @Test
+    void shouldRejectMissingUserBeforeAvatarValidationOrUpload() {
+        when(userMapper.findById(99L)).thenReturn(null);
+
+        assertBusinessException(
+                () -> profileService.uploadAvatar(99L, null),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "用户不存在"
+        );
+        verify(objectStorageServiceProvider, never()).getIfAvailable();
+        verify(objectStorageService, never()).upload(
+                anyString(),
+                anyString(),
+                anyLong(),
+                any(InputStream.class)
+        );
+    }
+
     private ProfilePatchRequest requestWithTags(String tagsJson) {
         ProfilePatchRequest request = new ProfilePatchRequest();
         request.setTagJson(tagsJson);
@@ -284,6 +427,23 @@ class ProfileServiceImplTest {
                 .school("同济大学")
                 .tagsJson("[\"Java\"]")
                 .build();
+    }
+
+    private MockMultipartFile pngFile() {
+        return new MockMultipartFile(
+                "file",
+                "avatar.png",
+                "image/png",
+                pngBytes()
+        );
+    }
+
+    private byte[] pngBytes() {
+        return new byte[]{
+                (byte) 0x89, 0x50, 0x4E, 0x47,
+                0x0D, 0x0A, 0x1A, 0x0A,
+                0x00
+        };
     }
 
     private void assertErrorCode(Runnable action, ErrorCode expectedErrorCode) {

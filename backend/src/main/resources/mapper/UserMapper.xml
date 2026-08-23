@@ -142,4 +142,11 @@
         WHERE id = #{id}
     </update>
 
+    <update id="updateAvatar">
+        UPDATE users
+        SET avatar = #{avatar},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
 </mapper>

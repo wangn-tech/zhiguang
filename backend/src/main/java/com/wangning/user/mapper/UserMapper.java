@@ -92,4 +92,16 @@ public interface UserMapper {
      * @return 受影响的行数
      */
     int updateProfile(User user);
+
+    /**
+     * 更新用户头像公开地址。
+     *
+     * @param id 用户 ID
+     * @param avatar 头像公开地址
+     * @return 受影响的行数
+     */
+    int updateAvatar(
+            @Param("id") long id,
+            @Param("avatar") String avatar
+    );
 }

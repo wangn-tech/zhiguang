@@ -9,20 +9,29 @@ import com.wangning.common.exception.ErrorCode;
 import com.wangning.profile.api.dto.ProfilePatchRequest;
 import com.wangning.profile.api.dto.ProfileResponse;
 import com.wangning.profile.model.Gender;
+import com.wangning.profile.service.AvatarFileValidator;
 import com.wangning.profile.service.ProfileService;
+import com.wangning.storage.ObjectStorageService;
+import com.wangning.storage.model.StoredObject;
 import com.wangning.user.domain.User;
 import com.wangning.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
@@ -30,6 +39,7 @@ import java.util.regex.Pattern;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProfileServiceImpl implements ProfileService {
 
     private static final String EMPTY_TAGS_JSON = "[]";
@@ -37,6 +47,8 @@ public class ProfileServiceImpl implements ProfileService {
 
     private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
+    private final AvatarFileValidator avatarFileValidator;
+    private final ObjectProvider<ObjectStorageService> objectStorageServiceProvider;
 
     /**
      * 合并、校验并更新当前用户资料。
@@ -86,6 +98,116 @@ public class ProfileServiceImpl implements ProfileService {
             throw new BusinessException(ErrorCode.INTERNAL_ERROR, "个人资料读取失败");
         }
         return toResponse(updated);
+    }
+
+    /**
+     * 校验头像、上传 OSS，并将公开地址保存到当前用户资料。
+     *
+     * <p>OSS 上传成功但数据库更新失败时，会尽力删除本次上传的新对象。
+     * 旧头像可能来自外部地址，因此本方法不根据 URL 猜测对象键并删除旧文件。</p>
+     *
+     * @param userId 当前用户 ID
+     * @param file 头像文件
+     * @return 更新头像后的完整资料
+     * @throws BusinessException 用户不存在、头像不合法、OSS 不可用或更新失败时抛出
+     */
+    @Override
+    public ProfileResponse uploadAvatar(long userId, MultipartFile file) {
+        if (userId <= 0 || userMapper.findById(userId) == null) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在");
+        }
+
+        AvatarFileValidator.ValidatedAvatar avatar = avatarFileValidator.validate(file);
+        ObjectStorageService storageService = objectStorageServiceProvider.getIfAvailable();
+        if (storageService == null) {
+            throw new BusinessException(ErrorCode.STORAGE_CONFIGURATION_ERROR);
+        }
+
+        String objectKey = buildAvatarObjectKey(userId, avatar.extension());
+        StoredObject storedObject = uploadAvatarObject(
+                storageService,
+                objectKey,
+                avatar.contentType(),
+                file
+        );
+
+        int affectedRows;
+        try {
+            affectedRows = userMapper.updateAvatar(userId, storedObject.publicUrl());
+        } catch (RuntimeException exception) {
+            compensateUploadedAvatar(storageService, storedObject.objectKey(), userId);
+            throw exception;
+        }
+        if (affectedRows != 1) {
+            compensateUploadedAvatar(storageService, storedObject.objectKey(), userId);
+            if (affectedRows == 0) {
+                throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在");
+            }
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "头像更新失败");
+        }
+
+        User updated = userMapper.findById(userId);
+        if (updated == null) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "个人资料读取失败");
+        }
+        return toResponse(updated);
+    }
+
+    /**
+     * 生成不能由客户端控制的头像对象键。
+     *
+     * @param userId 当前用户 ID
+     * @param extension 服务端确认的文件扩展名
+     * @return 头像对象键
+     */
+    private String buildAvatarObjectKey(long userId, String extension) {
+        return "avatars/%d/%s.%s".formatted(userId, UUID.randomUUID(), extension);
+    }
+
+    /**
+     * 打开头像输入流并上传对象存储。
+     *
+     * @param storageService 对象存储服务
+     * @param objectKey 后端生成的对象键
+     * @param contentType 服务端确认的 MIME 类型
+     * @param file 头像文件
+     * @return 已上传对象信息
+     */
+    private StoredObject uploadAvatarObject(
+            ObjectStorageService storageService,
+            String objectKey,
+            String contentType,
+            MultipartFile file
+    ) {
+        try (InputStream inputStream = file.getInputStream()) {
+            return storageService.upload(objectKey, contentType, file.getSize(), inputStream);
+        } catch (IOException exception) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "头像文件读取失败");
+        }
+    }
+
+    /**
+     * 数据库更新失败后尽力删除本次新上传的头像。
+     *
+     * @param storageService 对象存储服务
+     * @param objectKey 本次上传的对象键
+     * @param userId 当前用户 ID，仅用于安全日志上下文
+     */
+    private void compensateUploadedAvatar(
+            ObjectStorageService storageService,
+            String objectKey,
+            long userId
+    ) {
+        try {
+            storageService.delete(objectKey);
+        } catch (RuntimeException exception) {
+            log.warn(
+                    "Avatar upload compensation failed: userId={}, objectKey={}, exceptionType={}",
+                    userId,
+                    objectKey,
+                    exception.getClass().getSimpleName()
+            );
+        }
     }
 
     /**
