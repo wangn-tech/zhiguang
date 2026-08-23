@@ -19,6 +19,7 @@
 
     <properties>
         <java.version>21</java.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
     </properties>
 
     <dependencies>
@@ -79,6 +80,26 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- MyBatis 测试切片：只加载 Mapper 及其依赖 -->
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter-test</artifactId>
+            <version>3.0.3</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers：使用真实 MySQL 验证 Mapper SQL 和字段映射 -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mysql</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

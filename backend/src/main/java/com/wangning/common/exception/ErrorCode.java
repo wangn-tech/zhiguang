@@ -17,6 +17,7 @@ public enum ErrorCode {
     FORBIDDEN(HttpStatus.FORBIDDEN, "无权执行该操作"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "请求的资源不存在"),
     RESOURCE_CONFLICT(HttpStatus.CONFLICT, "资源状态冲突"),
+    IDENTIFIER_EXISTS(HttpStatus.CONFLICT, "账号已存在"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 
     private final HttpStatus httpStatus;
