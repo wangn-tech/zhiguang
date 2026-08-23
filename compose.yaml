@@ -1,0 +1,74 @@
+name: zhiguang
+
+services:
+  mysql:
+    image: mysql:8.4.11
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: zhiguang
+      MYSQL_USER: zhiguang
+      MYSQL_PASSWORD: zhiguang_dev
+      MYSQL_ROOT_PASSWORD: zhiguang_root_dev
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test:
+        - CMD
+        - mysqladmin
+        - ping
+        - -h
+        - 127.0.0.1
+        - -uroot
+        - -pzhiguang_root_dev
+        - --silent
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - backend
+
+  redis:
+    image: redis:8.4.5-alpine
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - zhiguang_redis_dev
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - -a
+        - zhiguang_redis_dev
+        - ping
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - backend
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  backend:
+    driver: bridge
