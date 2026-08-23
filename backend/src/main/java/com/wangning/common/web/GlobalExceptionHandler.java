@@ -8,9 +8,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * REST 接口的统一异常出口。
@@ -85,6 +87,46 @@ public class GlobalExceptionHandler {
                 request.getRequestURI()
         );
         return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * 处理不存在的接口或静态资源，避免被兜底处理器误报为服务器错误。
+     *
+     * @param exception 资源不存在异常
+     * @param request 当前 HTTP 请求
+     * @return HTTP 404 错误响应
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(
+            NoResourceFoundException exception,
+            HttpServletRequest request
+    ) {
+        ErrorResponse response = ErrorResponse.of(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                ErrorCode.RESOURCE_NOT_FOUND.getDefaultMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    /**
+     * 处理请求路径存在但 HTTP 方法不受支持的情况。
+     *
+     * @param exception 请求方法不受支持异常
+     * @param request 当前 HTTP 请求
+     * @return HTTP 405 错误响应
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException exception,
+            HttpServletRequest request
+    ) {
+        ErrorResponse response = ErrorResponse.of(
+                ErrorCode.METHOD_NOT_ALLOWED,
+                ErrorCode.METHOD_NOT_ALLOWED.getDefaultMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(response);
     }
 
     /**

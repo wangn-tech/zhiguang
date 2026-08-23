@@ -16,6 +16,7 @@ public enum ErrorCode {
     UNAUTHORIZED(HttpStatus.UNAUTHORIZED, "请先登录"),
     FORBIDDEN(HttpStatus.FORBIDDEN, "无权执行该操作"),
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "请求的资源不存在"),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "请求方法不受支持"),
     RESOURCE_CONFLICT(HttpStatus.CONFLICT, "资源状态冲突"),
     IDENTIFIER_EXISTS(HttpStatus.CONFLICT, "账号已存在"),
     IDENTIFIER_NOT_FOUND(HttpStatus.NOT_FOUND, "账号不存在"),
