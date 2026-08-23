@@ -26,3 +26,25 @@ mybatis:
   mapper-locations: classpath*:mapper/*.xml
   configuration:
     map-underscore-to-camel-case: true
+
+auth:
+  jwt:
+    issuer: zhiguang
+    key-id: zhiguang-key
+    access-token-ttl: PT15M
+    refresh-token-ttl: P7D
+    private-key: classpath:keys/private.pem
+    public-key: classpath:keys/public.pem
+  verification:
+    code-length: 6
+    ttl: PT5M
+    max-attempts: 5
+    send-interval: PT60S
+    daily-limit: 10
+  password:
+    bcrypt-strength: 12
+    min-length: 8
+    max-length: 64
+  cors:
+    allowed-origins:
+      - http://localhost:5173

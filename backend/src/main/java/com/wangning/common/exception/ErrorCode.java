@@ -18,6 +18,14 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "请求的资源不存在"),
     RESOURCE_CONFLICT(HttpStatus.CONFLICT, "资源状态冲突"),
     IDENTIFIER_EXISTS(HttpStatus.CONFLICT, "账号已存在"),
+    IDENTIFIER_NOT_FOUND(HttpStatus.NOT_FOUND, "账号不存在"),
+    INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "账号或凭证错误"),
+    VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "验证码无效或已过期"),
+    VERIFICATION_TOO_MANY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "验证码错误次数过多"),
+    VERIFICATION_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "验证码发送过于频繁"),
+    PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "密码不符合安全要求"),
+    TERMS_NOT_ACCEPTED(HttpStatus.BAD_REQUEST, "请先同意用户协议"),
+    REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "刷新令牌无效或已过期"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 
     private final HttpStatus httpStatus;
