@@ -27,3 +27,6 @@ replay_pid*
 .env
 .env.*
 !.env.example
+
+# AI 生成的参考信息 demo
+docs/

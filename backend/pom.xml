@@ -28,6 +28,19 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- 参数校验：支持 @Valid、@NotBlank 等 Jakarta Validation 注解 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Lombok：减少 Getter、日志对象等样板代码 -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
         <!-- JDBC：数据源与 JDBC 访问基础（配合 MyBatis 使用） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
