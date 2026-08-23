@@ -33,7 +33,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void shouldReturnConfiguredStatusForBusinessException() throws Exception {
-        mockMvc.perform(get("/test/business-error"))
+        mockMvc.perform(get("/test/business-error")
+                        .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("用户不存在"))
@@ -43,6 +44,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void shouldReturnFirstValidationMessageForInvalidRequestBody() throws Exception {
         mockMvc.perform(post("/test/validation-error")
+                        .accept(MediaType.APPLICATION_JSON)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -53,6 +55,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void shouldReturnBadRequestForUnreadableJson() throws Exception {
         mockMvc.perform(post("/test/validation-error")
+                        .accept(MediaType.APPLICATION_JSON)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{"))
                 .andExpect(status().isBadRequest())
@@ -62,7 +65,8 @@ class GlobalExceptionHandlerTest {
 
     @Test
     void shouldHideUnexpectedExceptionDetails() throws Exception {
-        mockMvc.perform(get("/test/unexpected-error"))
+        mockMvc.perform(get("/test/unexpected-error")
+                        .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.message").value("服务器内部错误"));

@@ -48,3 +48,13 @@ auth:
   cors:
     allowed-origins:
       - http://localhost:5173
+
+storage:
+  oss:
+    enabled: ${OSS_ENABLED:false}
+    region: ${OSS_REGION:}
+    endpoint: ${OSS_ENDPOINT:}
+    bucket: ${OSS_BUCKET:}
+    public-base-url: ${OSS_PUBLIC_BASE_URL:}
+    avatar-max-size: 5MB
+    presign-ttl: PT10M
