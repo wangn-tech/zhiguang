@@ -51,6 +51,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void shouldReturnBadRequestForUnreadableJson() throws Exception {
+        mockMvc.perform(post("/test/validation-error")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message").value("请求参数错误"));
+    }
+
+    @Test
     void shouldHideUnexpectedExceptionDetails() throws Exception {
         mockMvc.perform(get("/test/unexpected-error"))
                 .andExpect(status().isInternalServerError())

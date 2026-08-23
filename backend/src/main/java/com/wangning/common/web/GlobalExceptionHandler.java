@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -61,6 +62,26 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.of(
                 ErrorCode.BAD_REQUEST,
                 message,
+                request.getRequestURI()
+        );
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * 处理 JSON 格式错误、枚举值无效等无法读取请求体的情况。
+     *
+     * @param exception 请求体读取异常
+     * @param request 当前 HTTP 请求
+     * @return HTTP 400 错误响应
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+            HttpMessageNotReadableException exception,
+            HttpServletRequest request
+    ) {
+        ErrorResponse response = ErrorResponse.of(
+                ErrorCode.BAD_REQUEST,
+                ErrorCode.BAD_REQUEST.getDefaultMessage(),
                 request.getRequestURI()
         );
         return ResponseEntity.badRequest().body(response);
