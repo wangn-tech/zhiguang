@@ -12,6 +12,8 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -84,6 +86,29 @@ public class GlobalExceptionHandler {
         ErrorResponse response = ErrorResponse.of(
                 ErrorCode.BAD_REQUEST,
                 ErrorCode.BAD_REQUEST.getDefaultMessage(),
+                request.getRequestURI()
+        );
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * 处理缺少 multipart 字段、请求格式错误或上传体积超过容器限制的情况。
+     *
+     * @param exception multipart 请求异常
+     * @param request 当前 HTTP 请求
+     * @return HTTP 400 错误响应
+     */
+    @ExceptionHandler({
+            MissingServletRequestPartException.class,
+            MultipartException.class
+    })
+    public ResponseEntity<ErrorResponse> handleMultipartException(
+            Exception exception,
+            HttpServletRequest request
+    ) {
+        ErrorResponse response = ErrorResponse.of(
+                ErrorCode.BAD_REQUEST,
+                "上传文件缺失、格式错误或大小超过限制",
                 request.getRequestURI()
         );
         return ResponseEntity.badRequest().body(response);

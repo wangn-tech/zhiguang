@@ -6,12 +6,16 @@ import com.wangning.profile.api.dto.ProfileResponse;
 import com.wangning.profile.service.ProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 当前用户个人资料 REST API。
@@ -40,5 +44,24 @@ public class ProfileController {
     ) {
         long userId = jwtService.extractUserId(jwt);
         return profileService.updateProfile(userId, request);
+    }
+
+    /**
+     * 上传并更新当前登录用户头像。
+     *
+     * <p>multipart 字段名固定为 {@code file}，用户身份只从已经通过校验的
+     * Access Token 中取得。</p>
+     *
+     * @param jwt 已通过 Access Token 解码器校验的 JWT
+     * @param file 头像文件
+     * @return 更新头像后的完整资料
+     */
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ProfileResponse uploadAvatar(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestPart("file") MultipartFile file
+    ) {
+        long userId = jwtService.extractUserId(jwt);
+        return profileService.uploadAvatar(userId, file);
     }
 }

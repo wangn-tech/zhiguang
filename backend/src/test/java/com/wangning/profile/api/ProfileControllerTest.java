@@ -18,9 +18,11 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 
@@ -33,8 +35,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -194,10 +196,63 @@ class ProfileControllerTest {
     }
 
     @Test
-    void shouldNotExposeDeferredProfileEndpoints() throws Exception {
-        mockMvc.perform(post(PROFILE_PATH + "/avatar")
+    void shouldUploadAvatarForAuthenticatedUser() throws Exception {
+        MockMultipartFile file =
+                new MockMultipartFile(
+                        "file",
+                        "avatar.png",
+                        MediaType.IMAGE_PNG_VALUE,
+                        new byte[]{1, 2, 3}
+                );
+        when(jwtService.extractUserId(any(Jwt.class))).thenReturn(42L);
+        when(profileService.uploadAvatar(eq(42L), any(MultipartFile.class)))
+                .thenReturn(profileResponse());
+
+        mockMvc.perform(multipart(PROFILE_PATH + "/avatar")
+                        .file(file)
                         .with(accessToken()))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(42))
+                .andExpect(jsonPath("$.avatar")
+                        .value("https://static.example.com/avatars/42/avatar.png"));
+
+        ArgumentCaptor<MultipartFile> fileCaptor = ArgumentCaptor.forClass(MultipartFile.class);
+        verify(profileService).uploadAvatar(eq(42L), fileCaptor.capture());
+        assertThat(fileCaptor.getValue().getOriginalFilename()).isEqualTo("avatar.png");
+        assertThat(fileCaptor.getValue().getContentType()).isEqualTo(MediaType.IMAGE_PNG_VALUE);
+    }
+
+    @Test
+    void shouldRequireAccessTokenForAvatarUpload() throws Exception {
+        MockMultipartFile file =
+                new MockMultipartFile(
+                        "file",
+                        "avatar.png",
+                        MediaType.IMAGE_PNG_VALUE,
+                        new byte[]{1}
+                );
+
+        mockMvc.perform(multipart(PROFILE_PATH + "/avatar").file(file))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        verify(profileService, never()).uploadAvatar(anyLong(), any());
+    }
+
+    @Test
+    void shouldRejectAvatarRequestWithoutFilePart() throws Exception {
+        mockMvc.perform(multipart(PROFILE_PATH + "/avatar")
+                        .with(accessToken()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message")
+                        .value("上传文件缺失、格式错误或大小超过限制"));
+
+        verify(profileService, never()).uploadAvatar(anyLong(), any());
+    }
+
+    @Test
+    void shouldNotExposeDeferredProfileGetEndpoint() throws Exception {
 
         mockMvc.perform(get(PROFILE_PATH)
                         .with(accessToken()))
@@ -225,7 +280,7 @@ class ProfileControllerTest {
         return new ProfileResponse(
                 42L,
                 "新昵称",
-                null,
+                "https://static.example.com/avatars/42/avatar.png",
                 "个人简介",
                 "zg_42",
                 Gender.FEMALE,

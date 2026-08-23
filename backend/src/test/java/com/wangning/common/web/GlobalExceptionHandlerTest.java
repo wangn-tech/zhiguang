@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -72,6 +73,16 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.message").value("服务器内部错误"));
     }
 
+    @Test
+    void shouldReturnBadRequestForOversizedMultipartRequest() throws Exception {
+        mockMvc.perform(get("/test/oversized-upload")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+                .andExpect(jsonPath("$.message")
+                        .value("上传文件缺失、格式错误或大小超过限制"));
+    }
+
     @RestController
     @RequestMapping("/test")
     private static class TestController {
@@ -88,6 +99,11 @@ class GlobalExceptionHandlerTest {
         @GetMapping("/unexpected-error")
         void unexpectedError() {
             throw new IllegalStateException("不应返回给客户端的内部信息");
+        }
+
+        @GetMapping("/oversized-upload")
+        void oversizedUpload() {
+            throw new MaxUploadSizeExceededException(1024L);
         }
     }
 

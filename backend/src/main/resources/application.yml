@@ -21,6 +21,10 @@ spring:
   jackson:
     serialization:
       write-dates-as-timestamps: false
+  servlet:
+    multipart:
+      max-file-size: ${storage.oss.avatar-max-size}
+      max-request-size: 6MB
 
 mybatis:
   mapper-locations: classpath*:mapper/*.xml
