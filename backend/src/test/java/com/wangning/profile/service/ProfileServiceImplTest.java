@@ -337,6 +337,26 @@ class ProfileServiceImplTest {
     }
 
     @Test
+    void shouldNotUpdateDatabaseWhenAvatarUploadFails() {
+        BusinessException storageFailure = new BusinessException(
+                ErrorCode.STORAGE_OPERATION_FAILED
+        );
+        when(userMapper.findById(1L)).thenReturn(currentUser());
+        when(objectStorageServiceProvider.getIfAvailable()).thenReturn(objectStorageService);
+        when(objectStorageService.upload(
+                anyString(),
+                eq("image/png"),
+                anyLong(),
+                any(InputStream.class)
+        )).thenThrow(storageFailure);
+
+        assertThatThrownBy(() -> profileService.uploadAvatar(1L, pngFile()))
+                .isSameAs(storageFailure);
+        verify(userMapper, never()).updateAvatar(anyLong(), any());
+        verify(objectStorageService, never()).delete(anyString());
+    }
+
+    @Test
     void shouldDeleteNewAvatarWhenDatabaseUpdateHasUnexpectedRowCount() {
         StoredObject storedObject = new StoredObject(
                 "avatars/1/new.png",
