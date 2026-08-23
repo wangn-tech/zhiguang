@@ -77,6 +77,15 @@
         )
     </select>
 
+    <select id="existsByZgIdExceptId" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1
+            FROM users
+            WHERE zg_id = #{zgId}
+              AND id != #{excludeId}
+        )
+    </select>
+
     <insert id="insert"
             parameterType="com.wangning.user.domain.User"
             useGeneratedKeys="true"
@@ -116,6 +125,19 @@
     <update id="updatePasswordHash">
         UPDATE users
         SET password_hash = #{passwordHash},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateProfile" parameterType="com.wangning.user.domain.User">
+        UPDATE users
+        SET nickname = #{nickname},
+            bio = #{bio},
+            zg_id = #{zgId},
+            gender = #{gender},
+            birthday = #{birthday},
+            school = #{school},
+            tags_json = #{tagsJson},
             updated_at = CURRENT_TIMESTAMP
         WHERE id = #{id}
     </update>

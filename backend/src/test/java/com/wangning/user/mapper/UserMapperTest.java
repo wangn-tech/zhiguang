@@ -120,6 +120,84 @@ class UserMapperTest {
     }
 
     @Test
+    void shouldCheckZgIdExcludingCurrentUser() {
+        User first = completeUser("13800138010", null, "zg_unique");
+        User second = completeUser("13800138011", null, "zg_second");
+        userMapper.insert(first);
+        userMapper.insert(second);
+
+        assertThat(userMapper.existsByZgIdExceptId("zg_unique", second.getId())).isTrue();
+        assertThat(userMapper.existsByZgIdExceptId("zg_unique", first.getId())).isFalse();
+        assertThat(userMapper.existsByZgIdExceptId("ZG_UNIQUE", second.getId())).isTrue();
+        assertThat(userMapper.existsByZgIdExceptId("zg_missing", second.getId())).isFalse();
+    }
+
+    @Test
+    void shouldUpdateProfileAndPreserveCredentialsAndAvatar() throws Exception {
+        User user = completeUser("13800138012", "profile@example.com", "zg_before");
+        userMapper.insert(user);
+        User profile = User.builder()
+                .id(user.getId())
+                .nickname("更新后的昵称")
+                .bio(null)
+                .zgId("zg_after")
+                .gender(null)
+                .birthday(null)
+                .school("新的学校")
+                .tagsJson("[]")
+                .build();
+
+        int affectedRows = userMapper.updateProfile(profile);
+        User stored = userMapper.findById(user.getId());
+
+        assertThat(affectedRows).isEqualTo(1);
+        assertThat(stored.getNickname()).isEqualTo("更新后的昵称");
+        assertThat(stored.getBio()).isNull();
+        assertThat(stored.getZgId()).isEqualTo("zg_after");
+        assertThat(stored.getGender()).isNull();
+        assertThat(stored.getBirthday()).isNull();
+        assertThat(stored.getSchool()).isEqualTo("新的学校");
+        assertThat(objectMapper.readTree(stored.getTagsJson()))
+                .isEqualTo(objectMapper.readTree("[]"));
+        assertThat(stored.getPhone()).isEqualTo("13800138012");
+        assertThat(stored.getEmail()).isEqualTo("profile@example.com");
+        assertThat(stored.getPasswordHash()).isEqualTo("password-hash");
+        assertThat(stored.getAvatar()).isEqualTo("https://example.com/avatar.png");
+    }
+
+    @Test
+    void shouldReturnZeroWhenUpdatingUnknownProfile() {
+        User profile = User.builder()
+                .id(Long.MAX_VALUE)
+                .nickname("不存在的用户")
+                .tagsJson("[]")
+                .build();
+
+        assertThat(userMapper.updateProfile(profile)).isZero();
+    }
+
+    @Test
+    void shouldRejectDuplicateZgIdDuringProfileUpdate() {
+        User first = completeUser("13800138013", null, "zg_taken");
+        User second = completeUser("13800138014", null, "zg_available");
+        userMapper.insert(first);
+        userMapper.insert(second);
+        User profile = User.builder()
+                .id(second.getId())
+                .nickname(second.getNickname())
+                .bio(second.getBio())
+                .zgId("zg_taken")
+                .gender(second.getGender())
+                .birthday(second.getBirthday())
+                .school(second.getSchool())
+                .tagsJson(second.getTagsJson())
+                .build();
+
+        assertThatThrownBy(() -> userMapper.updateProfile(profile))
+                .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
     void shouldInsertLoginAuditAndReturnGeneratedId() {
         Instant createdAt = Instant.parse("2026-08-24T02:30:00Z");
         LoginLog loginLog = LoginLog.builder()
