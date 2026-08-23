@@ -19,6 +19,7 @@ public enum ErrorCode {
     RESOURCE_CONFLICT(HttpStatus.CONFLICT, "资源状态冲突"),
     IDENTIFIER_EXISTS(HttpStatus.CONFLICT, "账号已存在"),
     IDENTIFIER_NOT_FOUND(HttpStatus.NOT_FOUND, "账号不存在"),
+    ZGID_EXISTS(HttpStatus.CONFLICT, "知光号已存在"),
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "账号或凭证错误"),
     VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "验证码无效或已过期"),
     VERIFICATION_TOO_MANY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "验证码错误次数过多"),
