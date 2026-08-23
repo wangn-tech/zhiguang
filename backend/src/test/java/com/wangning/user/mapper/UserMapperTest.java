@@ -1,12 +1,15 @@
 package com.wangning.user.mapper;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wangning.auth.audit.LoginLog;
+import com.wangning.auth.audit.LoginLogMapper;
 import com.wangning.user.domain.User;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MySQLContainer;
@@ -41,6 +44,12 @@ class UserMapperTest {
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private LoginLogMapper loginLogMapper;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -95,6 +104,47 @@ class UserMapperTest {
 
         assertThatThrownBy(() -> userMapper.insert(completeUser(null, "duplicate@example.com", null)))
                 .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
+    void shouldUpdatePasswordHash() {
+        User user = completeUser("13800138009", null, null);
+        userMapper.insert(user);
+
+        int affectedRows = userMapper.updatePasswordHash(user.getId(), "new-password-hash");
+
+        assertThat(affectedRows).isEqualTo(1);
+        assertThat(userMapper.findById(user.getId()).getPasswordHash())
+                .isEqualTo("new-password-hash");
+        assertThat(userMapper.updatePasswordHash(Long.MAX_VALUE, "unused-hash")).isZero();
+    }
+
+    @Test
+    void shouldInsertLoginAuditAndReturnGeneratedId() {
+        Instant createdAt = Instant.parse("2026-08-24T02:30:00Z");
+        LoginLog loginLog = LoginLog.builder()
+                .identifier("missing@example.com")
+                .channel("CODE")
+                .ip("127.0.0.1")
+                .userAgent("JUnit")
+                .status("FAILED")
+                .createdAt(createdAt)
+                .build();
+
+        int affectedRows = loginLogMapper.insert(loginLog);
+
+        assertThat(affectedRows).isEqualTo(1);
+        assertThat(loginLog.getId()).isPositive();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT identifier FROM login_logs WHERE id = ?",
+                String.class,
+                loginLog.getId()
+        )).isEqualTo("missing@example.com");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM login_logs WHERE id = ?",
+                String.class,
+                loginLog.getId()
+        )).isEqualTo("FAILED");
     }
 
     private User completeUser(String phone, String email, String zgId) {

@@ -154,6 +154,32 @@ public class UserServiceImpl implements UserService {
     }
 
     /**
+     * 更新用户密码哈希。
+     *
+     * @param userId 用户 ID
+     * @param passwordHash BCrypt 密码哈希
+     * @throws BusinessException 参数无效、用户不存在或更新异常时抛出
+     */
+    @Override
+    @Transactional
+    public void updatePasswordHash(long userId, String passwordHash) {
+        if (userId <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "用户 ID 无效");
+        }
+        if (!StringUtils.hasText(passwordHash) || passwordHash.length() > 128) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "密码哈希无效");
+        }
+
+        int affectedRows = userMapper.updatePasswordHash(userId, passwordHash);
+        if (affectedRows == 0) {
+            throw new BusinessException(ErrorCode.RESOURCE_NOT_FOUND, "用户不存在");
+        }
+        if (affectedRows != 1) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "密码更新失败");
+        }
+    }
+
+    /**
      * 校验用户创建所需字段。
      *
      * @param phone 标准化手机号

@@ -56,4 +56,12 @@ public interface UserService {
      * @return 已回填主键和时间的用户
      */
     User createUser(User user);
+
+    /**
+     * 更新用户密码哈希。
+     *
+     * @param userId 用户 ID
+     * @param passwordHash BCrypt 密码哈希
+     */
+    void updatePasswordHash(long userId, String passwordHash);
 }

@@ -57,4 +57,16 @@ public interface UserMapper {
      * @return 受影响的行数
      */
     int insert(User user);
+
+    /**
+     * 更新用户密码哈希和最后更新时间。
+     *
+     * @param id 用户 ID
+     * @param passwordHash BCrypt 密码哈希
+     * @return 受影响的行数
+     */
+    int updatePasswordHash(
+            @Param("id") long id,
+            @Param("passwordHash") String passwordHash
+    );
 }

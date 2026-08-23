@@ -20,6 +20,8 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -44,6 +46,18 @@ public class AuthConfiguration {
     private static final String CLAIM_USER_ID = "uid";
 
     private final AuthProperties authProperties;
+
+    /**
+     * 创建使用配置强度的 BCrypt 密码编码器。
+     *
+     * @return 密码编码器
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder(
+                authProperties.getPassword().getBcryptStrength()
+        );
+    }
 
     /**
      * 创建使用 RS256 的 JWT 编码器。

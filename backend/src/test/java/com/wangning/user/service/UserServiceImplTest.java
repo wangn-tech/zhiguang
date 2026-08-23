@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -176,6 +177,38 @@ class UserServiceImplTest {
                 ErrorCode.INTERNAL_ERROR,
                 "用户创建失败"
         );
+    }
+
+    @Test
+    void shouldUpdatePasswordHash() {
+        when(userMapper.updatePasswordHash(1L, "$2a$12$encoded-password"))
+                .thenReturn(1);
+
+        userService.updatePasswordHash(1L, "$2a$12$encoded-password");
+
+        verify(userMapper).updatePasswordHash(1L, "$2a$12$encoded-password");
+    }
+
+    @Test
+    void shouldRejectPasswordUpdateForUnknownUser() {
+        when(userMapper.updatePasswordHash(99L, "$2a$12$encoded-password"))
+                .thenReturn(0);
+
+        assertBusinessException(
+                () -> userService.updatePasswordHash(99L, "$2a$12$encoded-password"),
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "用户不存在"
+        );
+    }
+
+    @Test
+    void shouldRejectInvalidPasswordHash() {
+        assertBusinessException(
+                () -> userService.updatePasswordHash(1L, " "),
+                ErrorCode.BAD_REQUEST,
+                "密码哈希无效"
+        );
+        verify(userMapper, never()).updatePasswordHash(anyLong(), any());
     }
 
     private void assertBusinessException(
