@@ -3,6 +3,7 @@ package com.wangning.storage.aliyun;
 import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.credentials.CredentialsProvider;
 import com.aliyun.sdk.service.oss2.credentials.EnvironmentVariableCredentialsProvider;
+import com.wangning.storage.ObjectStorageService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.util.unit.DataSize;
@@ -21,6 +22,7 @@ class OssConfigurationTest {
         contextRunner.run(context -> {
             assertThat(context).doesNotHaveBean(OSSClient.class);
             assertThat(context).doesNotHaveBean(CredentialsProvider.class);
+            assertThat(context).doesNotHaveBean(ObjectStorageService.class);
         });
     }
 
@@ -39,6 +41,7 @@ class OssConfigurationTest {
                 .run(context -> {
                     assertThat(context).hasSingleBean(OSSClient.class);
                     assertThat(context).hasSingleBean(CredentialsProvider.class);
+                    assertThat(context).hasSingleBean(ObjectStorageService.class);
                     assertThat(context.getBean(CredentialsProvider.class))
                             .isInstanceOf(EnvironmentVariableCredentialsProvider.class);
 

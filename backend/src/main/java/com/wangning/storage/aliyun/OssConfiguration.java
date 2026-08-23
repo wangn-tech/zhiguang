@@ -4,6 +4,7 @@ import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.OSSClientBuilder;
 import com.aliyun.sdk.service.oss2.credentials.CredentialsProvider;
 import com.aliyun.sdk.service.oss2.credentials.EnvironmentVariableCredentialsProvider;
+import com.wangning.storage.ObjectStorageService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -51,5 +52,20 @@ public class OssConfiguration {
             builder.endpoint(properties.getEndpoint());
         }
         return builder.build();
+    }
+
+    /**
+     * 创建阿里云 OSS 的通用存储适配器。
+     *
+     * @param ossClient 应用级 OSS 客户端
+     * @param properties OSS 非敏感配置
+     * @return 通用对象存储服务
+     */
+    @Bean
+    public ObjectStorageService objectStorageService(
+            OSSClient ossClient,
+            OssProperties properties
+    ) {
+        return new AliyunOssStorageService(ossClient, properties);
     }
 }

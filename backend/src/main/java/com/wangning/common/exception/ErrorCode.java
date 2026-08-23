@@ -28,6 +28,8 @@ public enum ErrorCode {
     PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "密码不符合安全要求"),
     TERMS_NOT_ACCEPTED(HttpStatus.BAD_REQUEST, "请先同意用户协议"),
     REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "刷新令牌无效或已过期"),
+    STORAGE_CONFIGURATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "对象存储配置错误"),
+    STORAGE_OPERATION_FAILED(HttpStatus.BAD_GATEWAY, "对象存储操作失败"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 
     private final HttpStatus httpStatus;
