@@ -1,5 +1,7 @@
 package com.wangning.knowpost.service;
 
+import com.wangning.knowpost.api.dto.KnowPostDetailResponse;
+
 import java.util.List;
 
 /**
@@ -66,4 +68,39 @@ public interface KnowPostService {
      * @param id 知文 ID
      */
     void publish(long creatorId, long id);
+
+    /**
+     * 更新作者知文的置顶状态。
+     *
+     * @param creatorId 当前作者用户 ID
+     * @param id 知文 ID
+     * @param isTop 是否置顶
+     */
+    void updateTop(long creatorId, long id, boolean isTop);
+
+    /**
+     * 更新作者知文的可见性。
+     *
+     * @param creatorId 当前作者用户 ID
+     * @param id 知文 ID
+     * @param visible 可见性值
+     */
+    void updateVisibility(long creatorId, long id, String visible);
+
+    /**
+     * 软删除作者知文。
+     *
+     * @param creatorId 当前作者用户 ID
+     * @param id 知文 ID
+     */
+    void delete(long creatorId, long id);
+
+    /**
+     * 查询知文详情。
+     *
+     * @param id 知文 ID
+     * @param currentUserId 当前登录用户 ID；匿名访问时为 {@code null}
+     * @return 知文详情
+     */
+    KnowPostDetailResponse getDetail(long id, Long currentUserId);
 }

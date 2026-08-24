@@ -1,10 +1,13 @@
 package com.wangning.knowpost.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.knowpost.api.dto.KnowPostDetailResponse;
 import com.wangning.knowpost.domain.KnowPost;
+import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.KnowPostService;
@@ -17,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -163,6 +167,82 @@ public class KnowPostServiceImpl implements KnowPostService {
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public void updateTop(long creatorId, long id, boolean isTop) {
+        validateCreator(creatorId);
+        validatePostId(id);
+        ensureSingleRow(knowPostMapper.updateTop(id, creatorId, isTop), "草稿不存在或无权限");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public void updateVisibility(long creatorId, long id, String visible) {
+        validateCreator(creatorId);
+        validatePostId(id);
+        if (!VALID_VISIBILITIES.contains(visible)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "可见性取值非法");
+        }
+        ensureSingleRow(knowPostMapper.updateVisibility(id, creatorId, visible), "草稿不存在或无权限");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional
+    public void delete(long creatorId, long id) {
+        validateCreator(creatorId);
+        validatePostId(id);
+        ensureSingleRow(knowPostMapper.softDelete(id, creatorId), "草稿不存在或无权限");
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public KnowPostDetailResponse getDetail(long id, Long currentUserId) {
+        validatePostId(id);
+        KnowPostDetailRow row = knowPostMapper.findDetailById(id);
+        if (row == null || "deleted".equals(row.getStatus())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "内容不存在");
+        }
+
+        boolean isPublic = "published".equals(row.getStatus()) && VISIBILITY_PUBLIC.equals(row.getVisible());
+        boolean isOwner = currentUserId != null && currentUserId.equals(row.getCreatorId());
+        if (!isPublic && !isOwner) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "无权限查看");
+        }
+
+        return new KnowPostDetailResponse(
+                String.valueOf(row.getId()),
+                row.getTitle(),
+                row.getDescription(),
+                row.getContentUrl(),
+                parseStringArray(row.getImgUrls()),
+                parseStringArray(row.getTags()),
+                String.valueOf(row.getCreatorId()),
+                row.getAuthorAvatar(),
+                row.getAuthorNickname(),
+                row.getAuthorTagJson(),
+                0L,
+                0L,
+                false,
+                false,
+                row.getIsTop(),
+                row.getVisible(),
+                row.getType(),
+                row.getPublishTime()
+        );
+    }
+
+    /**
      * 确保作者用户存在。
      *
      * @param creatorId 作者用户 ID
@@ -198,6 +278,25 @@ public class KnowPostServiceImpl implements KnowPostService {
             return objectMapper.writeValueAsString(values);
         } catch (JsonProcessingException exception) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "JSON 处理失败");
+        }
+    }
+
+    /**
+     * 解析数据库中的字符串数组 JSON。沿用原项目的容错行为：空值或格式错误时返回空列表。
+     *
+     * @param json JSON 数组文本
+     * @return 解析后的字符串列表
+     */
+    private List<String> parseStringArray(String json) {
+        if (!StringUtils.hasText(json)) {
+            return Collections.emptyList();
+        }
+        try {
+            List<String> values = objectMapper.readValue(json, new TypeReference<List<String>>() {
+            });
+            return values == null ? Collections.emptyList() : values;
+        } catch (JsonProcessingException exception) {
+            return Collections.emptyList();
         }
     }
 

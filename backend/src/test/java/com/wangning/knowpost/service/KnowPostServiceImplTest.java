@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.knowpost.domain.KnowPost;
+import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostServiceImpl;
@@ -24,6 +25,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -172,6 +175,75 @@ class KnowPostServiceImplTest {
         assertErrorCode(() -> knowPostService.publish(1L, 100L), ErrorCode.BAD_REQUEST);
 
         verify(knowPostMapper, times(2)).publish(100L, 1L);
+    }
+
+    @Test
+    void shouldUpdateTopVisibilityAndDeleteOwnedPost() {
+        when(knowPostMapper.updateTop(100L, 1L, true)).thenReturn(1);
+        when(knowPostMapper.updateVisibility(100L, 1L, "followers")).thenReturn(1);
+        when(knowPostMapper.softDelete(100L, 1L)).thenReturn(1);
+
+        knowPostService.updateTop(1L, 100L, true);
+        knowPostService.updateVisibility(1L, 100L, "followers");
+        knowPostService.delete(1L, 100L);
+
+        verify(knowPostMapper).updateTop(100L, 1L, true);
+        verify(knowPostMapper).updateVisibility(100L, 1L, "followers");
+        verify(knowPostMapper).softDelete(100L, 1L);
+    }
+
+    @Test
+    void shouldRejectUnknownVisibilityOnDedicatedEndpoint() {
+        assertErrorCode(() -> knowPostService.updateVisibility(1L, 100L, "unknown"), ErrorCode.BAD_REQUEST);
+
+        verify(knowPostMapper, never()).updateVisibility(anyLong(), anyLong(), anyString());
+    }
+
+    @Test
+    void shouldReturnPublicDetailAndRestrictNonPublicDetailToOwner() {
+        KnowPostDetailRow row = detailRow("published", "public");
+        when(knowPostMapper.findDetailById(100L)).thenReturn(row);
+
+        var publicDetail = knowPostService.getDetail(100L, null);
+
+        assertThat(publicDetail.id()).isEqualTo("100");
+        assertThat(publicDetail.images()).containsExactly("https://static.example.com/posts/100/images/a.png");
+        assertThat(publicDetail.tags()).containsExactly("Java", "MyBatis");
+        assertThat(publicDetail.likeCount()).isZero();
+        assertThat(publicDetail.liked()).isFalse();
+
+        row.setVisible("private");
+        assertErrorCode(() -> knowPostService.getDetail(100L, 2L), ErrorCode.BAD_REQUEST);
+        assertThat(knowPostService.getDetail(100L, 1L).visible()).isEqualTo("private");
+    }
+
+    @Test
+    void shouldRejectDeletedOrMissingDetail() {
+        when(knowPostMapper.findDetailById(100L)).thenReturn(detailRow("deleted", "public"));
+
+        assertErrorCode(() -> knowPostService.getDetail(100L, 1L), ErrorCode.BAD_REQUEST);
+
+        when(knowPostMapper.findDetailById(101L)).thenReturn(null);
+        assertErrorCode(() -> knowPostService.getDetail(101L, null), ErrorCode.BAD_REQUEST);
+    }
+
+    private KnowPostDetailRow detailRow(String status, String visible) {
+        KnowPostDetailRow row = new KnowPostDetailRow();
+        row.setId(100L);
+        row.setCreatorId(1L);
+        row.setTitle("知文标题");
+        row.setDescription("知文摘要");
+        row.setTags("[\"Java\",\"MyBatis\"]");
+        row.setImgUrls("[\"https://static.example.com/posts/100/images/a.png\"]");
+        row.setContentUrl("https://static.example.com/posts/100/content.md");
+        row.setAuthorAvatar("https://static.example.com/avatars/1.png");
+        row.setAuthorNickname("作者");
+        row.setAuthorTagJson("[\"Java\"]");
+        row.setIsTop(false);
+        row.setVisible(visible);
+        row.setType("image_text");
+        row.setStatus(status);
+        return row;
     }
 
     private void assertErrorCode(Runnable runnable, ErrorCode errorCode) {
