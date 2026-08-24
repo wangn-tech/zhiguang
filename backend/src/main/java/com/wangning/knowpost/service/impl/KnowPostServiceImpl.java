@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.cache.model.KnowPostDetailSnapshot;
+import com.wangning.cache.key.CacheKeys;
 import com.wangning.cache.service.KnowPostDetailCacheService;
+import com.wangning.cache.singleflight.CacheSingleFlight;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
@@ -61,6 +63,7 @@ public class KnowPostServiceImpl implements KnowPostService {
     private final CounterService counterService;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final KnowPostDetailCacheService knowPostDetailCacheService;
+    private final CacheSingleFlight cacheSingleFlight;
     private final OutboxMapper outboxMapper;
 
     /**
@@ -237,22 +240,43 @@ public class KnowPostServiceImpl implements KnowPostService {
             return enrichDetail(cachedSnapshot.get(), currentUserId);
         }
 
+        DetailLoadResult loaded = cacheSingleFlight.execute(
+                CacheKeys.detailKey(id),
+                () -> loadDetailSnapshot(id)
+        );
+        boolean isOwner = currentUserId != null && currentUserId.equals(loaded.creatorId());
+        if (!loaded.publicVisible() && !isOwner) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "无权限查看");
+        }
+        return enrichDetail(loaded.snapshot(), currentUserId);
+    }
+
+    /**
+     * 在 singleflight leader 中双重检查公开详情缓存，必要时回源 MySQL。
+     *
+     * <p>非公开详情不会写入共享缓存；其快照只在本次同飞行请求之间传递，所有等待者仍须在调用方
+     * 基于 {@code creatorId} 完成权限校验后才能使用。</p>
+     *
+     * @param id 知文 ID
+     * @return 公开缓存快照或刚从 MySQL 构建的详情结果
+     */
+    private DetailLoadResult loadDetailSnapshot(long id) {
+        var cached = knowPostDetailCacheService.find(id);
+        if (cached.isPresent()) {
+            return new DetailLoadResult(cached.get(), true, null);
+        }
+
         KnowPostDetailRow row = knowPostMapper.findDetailById(id);
         if (row == null || "deleted".equals(row.getStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "内容不存在");
         }
 
         boolean isPublic = "published".equals(row.getStatus()) && VISIBILITY_PUBLIC.equals(row.getVisible());
-        boolean isOwner = currentUserId != null && currentUserId.equals(row.getCreatorId());
-        if (!isPublic && !isOwner) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "无权限查看");
-        }
-
         KnowPostDetailSnapshot snapshot = toSnapshot(row);
         if (isPublic) {
             knowPostDetailCacheService.put(snapshot);
         }
-        return enrichDetail(snapshot, currentUserId);
+        return new DetailLoadResult(snapshot, isPublic, row.getCreatorId());
     }
 
     /**
@@ -426,5 +450,19 @@ public class KnowPostServiceImpl implements KnowPostService {
         if (!StringUtils.hasText(value)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, message);
         }
+    }
+
+    /**
+     * singleflight 共享的详情加载结果。
+     *
+     * @param snapshot 稳定详情快照
+     * @param publicVisible 是否可作为公开详情访问
+     * @param creatorId 非公开详情的作者 ID；公开缓存命中时可为 {@code null}
+     */
+    private record DetailLoadResult(
+            KnowPostDetailSnapshot snapshot,
+            boolean publicVisible,
+            Long creatorId
+    ) {
     }
 }

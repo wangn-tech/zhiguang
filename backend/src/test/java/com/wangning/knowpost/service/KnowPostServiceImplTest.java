@@ -6,6 +6,7 @@ import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
 import com.wangning.cache.service.KnowPostDetailCacheService;
 import com.wangning.cache.model.KnowPostDetailSnapshot;
+import com.wangning.cache.singleflight.CacheSingleFlight;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
@@ -83,6 +84,7 @@ class KnowPostServiceImplTest {
                 counterService,
                 applicationEventPublisher,
                 knowPostDetailCacheService,
+                new CacheSingleFlight(),
                 outboxMapper
         );
         lenient().when(userService.findById(1L)).thenReturn(Optional.of(User.builder().id(1L).build()));

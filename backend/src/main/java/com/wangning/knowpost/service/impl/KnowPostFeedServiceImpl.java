@@ -5,7 +5,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.cache.model.FeedItemSnapshot;
 import com.wangning.cache.model.FeedPageSnapshot;
+import com.wangning.cache.key.CacheKeys;
 import com.wangning.cache.service.KnowPostFeedCacheService;
+import com.wangning.cache.singleflight.CacheSingleFlight;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
@@ -39,6 +41,7 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
     private final ObjectMapper objectMapper;
     private final CounterService counterService;
     private final KnowPostFeedCacheService knowPostFeedCacheService;
+    private final CacheSingleFlight cacheSingleFlight;
 
     /**
      * {@inheritDoc}
@@ -52,12 +55,10 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
             return enrichPage(cached.get(), currentUserId);
         }
 
-        List<KnowPostFeedRow> rows = knowPostMapper.listFeedPublic(
-                pageRequest.size() + 1,
-                pageRequest.offset()
+        FeedPageSnapshot snapshot = cacheSingleFlight.execute(
+                CacheKeys.publicFeedKey(pageRequest.page(), pageRequest.size()),
+                () -> loadPublicSnapshot(pageRequest)
         );
-        FeedPageSnapshot snapshot = toSnapshot(rows, pageRequest);
-        knowPostFeedCacheService.putPublic(snapshot);
         return enrichPage(snapshot, currentUserId);
     }
 
@@ -76,6 +77,32 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
             return enrichPage(cached.get(), creatorId);
         }
 
+        FeedPageSnapshot snapshot = cacheSingleFlight.execute(
+                CacheKeys.mineFeedKey(creatorId, pageRequest.page(), pageRequest.size()),
+                () -> loadMineSnapshot(creatorId, pageRequest)
+        );
+        return enrichPage(snapshot, creatorId);
+    }
+
+    private FeedPageSnapshot loadPublicSnapshot(PageRequest pageRequest) {
+        var cached = knowPostFeedCacheService.findPublic(pageRequest.page(), pageRequest.size());
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+        List<KnowPostFeedRow> rows = knowPostMapper.listFeedPublic(
+                pageRequest.size() + 1,
+                pageRequest.offset()
+        );
+        FeedPageSnapshot snapshot = toSnapshot(rows, pageRequest);
+        knowPostFeedCacheService.putPublic(snapshot);
+        return snapshot;
+    }
+
+    private FeedPageSnapshot loadMineSnapshot(long creatorId, PageRequest pageRequest) {
+        var cached = knowPostFeedCacheService.findMine(creatorId, pageRequest.page(), pageRequest.size());
+        if (cached.isPresent()) {
+            return cached.get();
+        }
         List<KnowPostFeedRow> rows = knowPostMapper.listMyPublished(
                 creatorId,
                 pageRequest.size() + 1,
@@ -83,7 +110,7 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
         );
         FeedPageSnapshot snapshot = toSnapshot(rows, pageRequest);
         knowPostFeedCacheService.putMine(creatorId, snapshot);
-        return enrichPage(snapshot, creatorId);
+        return snapshot;
     }
 
     /**

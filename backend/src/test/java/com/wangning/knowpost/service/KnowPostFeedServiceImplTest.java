@@ -7,6 +7,7 @@ import com.wangning.counter.service.CounterService;
 import com.wangning.cache.model.FeedItemSnapshot;
 import com.wangning.cache.model.FeedPageSnapshot;
 import com.wangning.cache.service.KnowPostFeedCacheService;
+import com.wangning.cache.singleflight.CacheSingleFlight;
 import com.wangning.knowpost.domain.KnowPostFeedRow;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostFeedServiceImpl;
@@ -19,6 +20,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,7 +51,8 @@ class KnowPostFeedServiceImplTest {
                 knowPostMapper,
                 new ObjectMapper(),
                 counterService,
-                knowPostFeedCacheService
+                knowPostFeedCacheService,
+                new CacheSingleFlight()
         );
         lenient().when(knowPostFeedCacheService.findPublic(
                         org.mockito.ArgumentMatchers.anyInt(),
@@ -144,6 +150,75 @@ class KnowPostFeedServiceImplTest {
         assertThat(response.items().getFirst().likeCount()).isEqualTo(7L);
         assertThat(response.items().getFirst().liked()).isTrue();
         verify(knowPostMapper, org.mockito.Mockito.never()).listFeedPublic(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void shouldCoalesceConcurrentPublicFeedCacheMisses() throws Exception {
+        CountDownLatch mapperStarted = new CountDownLatch(1);
+        CountDownLatch releaseMapper = new CountDownLatch(1);
+        AtomicInteger mapperCalls = new AtomicInteger();
+        when(knowPostMapper.listFeedPublic(21, 0)).thenAnswer(invocation -> {
+            mapperCalls.incrementAndGet();
+            mapperStarted.countDown();
+            assertThat(releaseMapper.await(3, TimeUnit.SECONDS)).isTrue();
+            return List.of(row(100L, "并发知文"));
+        });
+        when(counterService.getCounts("knowpost", "100", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 0L, "fav", 0L));
+
+        AtomicReference<Throwable> leaderFailure = new AtomicReference<>();
+        Thread leader = new Thread(() -> {
+            try {
+                knowPostFeedService.getPublicFeed(1, 20, null);
+            } catch (Throwable throwable) {
+                leaderFailure.set(throwable);
+            }
+        });
+        leader.start();
+        try {
+            assertThat(mapperStarted.await(3, TimeUnit.SECONDS)).isTrue();
+            List<AtomicReference<Throwable>> followerFailures = new java.util.ArrayList<>();
+            List<Thread> followers = new java.util.ArrayList<>();
+            for (int index = 0; index < 7; index++) {
+                AtomicReference<Throwable> failure = new AtomicReference<>();
+                Thread follower = new Thread(() -> {
+                    try {
+                        knowPostFeedService.getPublicFeed(1, 20, null);
+                    } catch (Throwable throwable) {
+                        failure.set(throwable);
+                    }
+                });
+                follower.start();
+                awaitWaiting(follower);
+                followerFailures.add(failure);
+                followers.add(follower);
+            }
+            releaseMapper.countDown();
+            leader.join(3_000);
+            assertThat(leader.isAlive()).isFalse();
+            assertThat(leaderFailure.get()).isNull();
+            for (int index = 0; index < followers.size(); index++) {
+                followers.get(index).join(3_000);
+                assertThat(followers.get(index).isAlive()).isFalse();
+                assertThat(followerFailures.get(index).get()).isNull();
+            }
+        } finally {
+            releaseMapper.countDown();
+        }
+
+        assertThat(mapperCalls).hasValue(1);
+    }
+
+    private static void awaitWaiting(Thread thread) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (System.nanoTime() < deadline) {
+            Thread.State state = thread.getState();
+            if (state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING) {
+                return;
+            }
+            Thread.onSpinWait();
+        }
+        throw new AssertionError("Feed singleflight follower 未进入等待状态");
     }
 
     private KnowPostFeedRow row(long id, String title) {
