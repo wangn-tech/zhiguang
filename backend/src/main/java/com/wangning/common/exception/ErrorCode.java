@@ -30,6 +30,7 @@ public enum ErrorCode {
     REFRESH_TOKEN_INVALID(HttpStatus.UNAUTHORIZED, "刷新令牌无效或已过期"),
     STORAGE_CONFIGURATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "对象存储配置错误"),
     STORAGE_OPERATION_FAILED(HttpStatus.BAD_GATEWAY, "对象存储操作失败"),
+    SEARCH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "搜索服务暂时不可用"),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "服务器内部错误");
 
     private final HttpStatus httpStatus;

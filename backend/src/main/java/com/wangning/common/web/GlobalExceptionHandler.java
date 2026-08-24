@@ -3,6 +3,7 @@ package com.wangning.common.web;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -68,6 +69,26 @@ public class GlobalExceptionHandler {
                 message,
                 request.getRequestURI()
         );
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    /**
+     * 处理请求参数和路径参数校验失败。
+     *
+     * @param exception 参数约束违反异常
+     * @param request 当前 HTTP 请求
+     * @return HTTP 400 错误响应
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(
+            ConstraintViolationException exception,
+            HttpServletRequest request
+    ) {
+        String message = exception.getConstraintViolations().stream()
+                .map(violation -> violation.getMessage())
+                .findFirst()
+                .orElse(ErrorCode.BAD_REQUEST.getDefaultMessage());
+        ErrorResponse response = ErrorResponse.of(ErrorCode.BAD_REQUEST, message, request.getRequestURI());
         return ResponseEntity.badRequest().body(response);
     }
 

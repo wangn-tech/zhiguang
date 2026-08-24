@@ -76,6 +76,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
+                                "/api/v1/search",
+                                "/api/v1/search/suggest",
                                 "/api/v1/knowposts/feed",
                                 "/api/v1/knowposts/detail/*",
                                 "/api/v1/relation/following",
