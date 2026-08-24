@@ -1,5 +1,10 @@
 package com.wangning.relation.service;
 
+import com.wangning.relation.api.dto.PublicProfileResponse;
+import com.wangning.relation.api.dto.RelationCountersResponse;
+
+import java.util.List;
+
 /**
  * 用户关系核心服务。
  */
@@ -31,4 +36,34 @@ public interface RelationService {
      * @return 双向关系状态
      */
     RelationStatus getStatus(long userId, long otherUserId);
+
+    /**
+     * 查询用户关注的公开资料列表。
+     *
+     * @param userId 被查询用户 ID
+     * @param limit 最大返回数量
+     * @param offset 偏移量；仅在 {@code cursor} 为空时生效
+     * @param cursor 旧前端传入的毫秒时间游标，可为空
+     * @return 按最近关注时间倒序的公开资料
+     */
+    List<PublicProfileResponse> listFollowings(long userId, int limit, int offset, Long cursor);
+
+    /**
+     * 查询用户粉丝的公开资料列表。
+     *
+     * @param userId 被查询用户 ID
+     * @param limit 最大返回数量
+     * @param offset 偏移量；仅在 {@code cursor} 为空时生效
+     * @param cursor 旧前端传入的毫秒时间游标，可为空
+     * @return 按最近关注时间倒序的公开资料
+     */
+    List<PublicProfileResponse> listFollowers(long userId, int limit, int offset, Long cursor);
+
+    /**
+     * 查询用户主页所需的关系计数。
+     *
+     * @param userId 被查询用户 ID
+     * @return 关系计数；尚未实现的计数项为 0
+     */
+    RelationCountersResponse getCounters(long userId);
 }

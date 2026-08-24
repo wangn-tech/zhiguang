@@ -4,6 +4,8 @@ import com.wangning.user.domain.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * 用户数据访问接口。
  */
@@ -17,6 +19,14 @@ public interface UserMapper {
      * @return 用户，不存在时返回 {@code null}
      */
     User findById(@Param("id") long id);
+
+    /**
+     * 根据用户 ID 批量查询用户。
+     *
+     * @param ids 用户 ID 集合，不能为空
+     * @return 用户列表；顺序不保证与输入一致
+     */
+    List<User> listByIds(@Param("ids") List<Long> ids);
 
     /**
      * 根据手机号查询用户。

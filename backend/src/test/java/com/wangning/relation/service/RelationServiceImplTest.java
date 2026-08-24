@@ -4,9 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.relation.domain.UserRelation;
+import com.wangning.relation.domain.RelationListItem;
 import com.wangning.relation.mapper.RelationMapper;
 import com.wangning.relation.outbox.OutboxMapper;
 import com.wangning.relation.outbox.OutboxRecord;
+import com.wangning.relation.api.dto.PublicProfileResponse;
+import com.wangning.relation.api.dto.RelationCountersResponse;
 import com.wangning.relation.service.impl.RelationServiceImpl;
 import com.wangning.user.domain.User;
 import com.wangning.user.service.UserService;
@@ -17,6 +20,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -144,6 +150,61 @@ class RelationServiceImplTest {
         assertThatThrownBy(() -> relationService.follow(1L, 2L))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Outbox 事件写入失败");
+    }
+
+    @Test
+    void shouldReturnPublicProfilesInRelationOrder() {
+        when(relationMapper.listFollowings(1L, 100, 0)).thenReturn(List.of(
+                RelationListItem.builder().userId(20L).createdAt(Instant.parse("2026-08-24T10:00:00Z")).build(),
+                RelationListItem.builder().userId(10L).createdAt(Instant.parse("2026-08-24T09:00:00Z")).build()
+        ));
+        when(userService.listByIds(List.of(20L, 10L))).thenReturn(List.of(
+                publicUser(10L, "较早关注的用户"),
+                publicUser(20L, "最近关注的用户")
+        ));
+
+        List<PublicProfileResponse> profiles = relationService.listFollowings(1L, 200, -1, null);
+
+        assertThat(profiles)
+                .extracting(PublicProfileResponse::id)
+                .containsExactly(20L, 10L);
+        assertThat(profiles.getFirst().nickname()).isEqualTo("最近关注的用户");
+        verify(relationMapper).listFollowings(1L, 100, 0);
+    }
+
+    @Test
+    void shouldUseCursorForFollowerList() {
+        Instant cursor = Instant.parse("2026-08-24T10:00:00Z");
+        when(relationMapper.listFollowersBefore(1L, cursor, 20)).thenReturn(List.of());
+
+        assertThat(relationService.listFollowers(1L, 20, 8, cursor.toEpochMilli())).isEmpty();
+
+        verify(relationMapper).listFollowersBefore(1L, cursor, 20);
+        verify(relationMapper, never()).listFollowers(any(Long.class), any(Integer.class), any(Integer.class));
+    }
+
+    @Test
+    void shouldReturnRelationCountersWithPendingInteractionCountsAsZero() {
+        when(relationMapper.countFollowings(1L)).thenReturn(12L);
+        when(relationMapper.countFollowers(1L)).thenReturn(34L);
+
+        RelationCountersResponse counters = relationService.getCounters(1L);
+
+        assertThat(counters).isEqualTo(new RelationCountersResponse(12L, 34L, 0L, 0L, 0L));
+    }
+
+    private User publicUser(long id, String nickname) {
+        return User.builder()
+                .id(id)
+                .nickname(nickname)
+                .avatar("https://static.example.com/avatars/" + id + ".png")
+                .bio("个人简介")
+                .zgId("zg_" + id)
+                .gender("UNKNOWN")
+                .birthday(LocalDate.of(2000, 1, 1))
+                .school("同济大学")
+                .tagsJson("[\"Java\"]")
+                .build();
     }
 
     private void assertErrorCode(Runnable runnable, ErrorCode errorCode) {

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -40,6 +41,25 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public Optional<User> findById(long id) {
         return Optional.ofNullable(userMapper.findById(id));
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<User> listByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<Long> normalizedIds = ids.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
+        if (normalizedIds.isEmpty()) {
+            return List.of();
+        }
+        return userMapper.listByIds(normalizedIds);
     }
 
     /**

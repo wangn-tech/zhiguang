@@ -18,6 +18,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -79,6 +80,20 @@ class UserMapperTest {
         assertThat(userMapper.findByEmail("lookup@example.com").getId()).isEqualTo(user.getId());
         assertThat(userMapper.existsByPhone("13800138001")).isTrue();
         assertThat(userMapper.existsByEmail("lookup@example.com")).isTrue();
+    }
+
+    @Test
+    void shouldListUsersByIds() {
+        User first = completeUser("13800138016", "first@example.com", "zg_first");
+        User second = completeUser("13800138017", "second@example.com", "zg_second_list");
+        userMapper.insert(first);
+        userMapper.insert(second);
+
+        List<User> users = userMapper.listByIds(List.of(second.getId(), first.getId()));
+
+        assertThat(users)
+                .extracting(User::getId)
+                .containsExactlyInAnyOrder(first.getId(), second.getId());
     }
 
     @Test

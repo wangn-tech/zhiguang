@@ -77,7 +77,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/api/v1/knowposts/feed",
-                                "/api/v1/knowposts/detail/*"
+                                "/api/v1/knowposts/detail/*",
+                                "/api/v1/relation/following",
+                                "/api/v1/relation/followers",
+                                "/api/v1/relation/counter"
                         ).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth

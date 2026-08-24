@@ -2,6 +2,7 @@ package com.wangning.user.service;
 
 import com.wangning.user.domain.User;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -16,6 +17,16 @@ public interface UserService {
      * @return 用户 Optional，不存在时为空
      */
     Optional<User> findById(long id);
+
+    /**
+     * 根据用户 ID 批量查询用户。
+     *
+     * <p>返回顺序不保证与输入一致，调用方需要按自身业务顺序重新组装结果。</p>
+     *
+     * @param ids 用户 ID 集合
+     * @return 已存在用户列表；空集合返回空列表
+     */
+    List<User> listByIds(List<Long> ids);
 
     /**
      * 根据手机号查询用户。

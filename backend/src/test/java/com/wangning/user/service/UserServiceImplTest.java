@@ -13,7 +13,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -61,6 +63,27 @@ class UserServiceImplTest {
         verify(userMapper, never()).findByEmail(any());
         verify(userMapper, never()).existsByPhone(any());
         verify(userMapper, never()).existsByEmail(any());
+    }
+
+    @Test
+    void shouldFilterInvalidAndDuplicateIdsWhenListingUsers() {
+        User first = User.builder().id(1L).build();
+        User second = User.builder().id(2L).build();
+        when(userMapper.listByIds(List.of(2L, 1L))).thenReturn(List.of(second, first));
+
+        List<User> users = userService.listByIds(Arrays.asList(null, -1L, 2L, 1L, 2L, 0L));
+
+        assertThat(users).containsExactly(second, first);
+        verify(userMapper).listByIds(List.of(2L, 1L));
+    }
+
+    @Test
+    void shouldReturnEmptyForEmptyOrInvalidIdListsWithoutQueryingMapper() {
+        assertThat(userService.listByIds(null)).isEmpty();
+        assertThat(userService.listByIds(List.of())).isEmpty();
+        assertThat(userService.listByIds(Arrays.asList(null, 0L, -1L))).isEmpty();
+
+        verify(userMapper, never()).listByIds(any());
     }
 
     @Test
