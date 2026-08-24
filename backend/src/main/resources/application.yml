@@ -103,6 +103,15 @@ relation:
       poll-interval: PT1S
 
 counter:
+  recovery:
+    # 实体 SDS 缺失时从互动位图恢复；Redisson 协调多实例恢复，默认启用。
+    enabled: ${COUNTER_RECOVERY_ENABLED:true}
+    lock-watchdog: PT30S
+    rate-permits: 3
+    rate-window: PT10S
+    rate-limiter-idle: PT1H
+    backoff-base: PT0.5S
+    backoff-max: PT30S
   events:
     # Kafka 未启动时保持关闭；启用后互动状态变化会异步折叠为知文计数。
     enabled: ${COUNTER_EVENTS_ENABLED:false}

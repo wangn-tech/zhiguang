@@ -40,8 +40,12 @@ public class CounterAggregationConsumer {
             if not redis.call('SET', KEYS[3], '1', 'NX', 'PX', ARGV[3]) then
                 return 0
             end
-            redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
-            redis.call('SADD', KEYS[2], KEYS[1])
+            local sequence = tonumber(ARGV[5]) or 0
+            local fence = tonumber(redis.call('GET', KEYS[6])) or 0
+            if sequence == 0 or sequence > fence then
+                redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
+                redis.call('SADD', KEYS[2], KEYS[1])
+            end
 
             if redis.call('EXISTS', KEYS[5]) == 1 then
                 local userField = tonumber(ARGV[4])
@@ -166,12 +170,14 @@ public class CounterAggregationConsumer {
                         CounterKeys.aggregationIndexKey(),
                         CounterKeys.eventDedupKey(event.getEventId()),
                         CounterKeys.userSdsKey(knowPost.getCreatorId()),
-                        CounterKeys.userCounterInitializedKey(knowPost.getCreatorId())
+                        CounterKeys.userCounterInitializedKey(knowPost.getCreatorId()),
+                        CounterKeys.recoveryFenceKey(event.getEntityType(), event.getEntityId())
                 ),
                 String.valueOf(event.getIndex()),
                 String.valueOf(event.getDelta()),
                 String.valueOf(properties.getDedupTtl().toMillis()),
-                String.valueOf(userMetric(event).index())
+                String.valueOf(userMetric(event).index()),
+                String.valueOf(event.getSequence())
         );
     }
 

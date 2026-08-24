@@ -7,6 +7,7 @@ import com.wangning.counter.schema.CounterKeys;
 import com.wangning.counter.schema.CounterMetric;
 import com.wangning.counter.event.CounterEvent;
 import com.wangning.counter.event.CounterEventPublisher;
+import com.wangning.counter.service.CounterRecoveryService;
 import com.wangning.counter.service.CounterService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -18,7 +19,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 基于 Redis 分片位图的互动状态服务实现。
@@ -40,14 +40,15 @@ public class CounterServiceImpl implements CounterService {
                 return 0
             end
             redis.call('SETBIT', KEYS[1], ARGV[1], ARGV[3])
-            return 1
+            redis.call('SADD', KEYS[2], KEYS[1])
+            return redis.call('INCR', KEYS[3])
             """, Long.class);
     private static final RedisScript<List> READ_COUNTS_SCRIPT = RedisScript.of("""
             local fieldSize = tonumber(ARGV[1])
             local fieldCount = tonumber(ARGV[2])
             local value = redis.call('GET', KEYS[1])
-            if not value then
-                value = string.rep(string.char(0), fieldSize * fieldCount)
+            if not value or string.len(value) ~= fieldSize * fieldCount then
+                return {0}
             end
 
             local function read32be(source, offset)
@@ -55,7 +56,7 @@ public class CounterServiceImpl implements CounterService {
                 return ((b1 or 0) * 16777216) + ((b2 or 0) * 65536) + ((b3 or 0) * 256) + (b4 or 0)
             end
 
-            local result = {}
+            local result = {1}
             for index = 3, #ARGV do
                 result[#result + 1] = read32be(value, tonumber(ARGV[index]) * fieldSize)
             end
@@ -64,6 +65,7 @@ public class CounterServiceImpl implements CounterService {
 
     private final StringRedisTemplate redisTemplate;
     private final CounterEventPublisher eventPublisher;
+    private final CounterRecoveryService recoveryService;
 
     /** {@inheritDoc} */
     @Override
@@ -102,15 +104,15 @@ public class CounterServiceImpl implements CounterService {
         arguments.add(String.valueOf(SDS_FIELD_SIZE));
         arguments.add(String.valueOf(SDS_FIELD_COUNT));
         counterMetrics.forEach(metric -> arguments.add(String.valueOf(metric.index())));
-        List<?> values = redisTemplate.execute(
-                READ_COUNTS_SCRIPT,
-                List.of(CounterKeys.sdsKey(entityType, entityId)),
-                arguments.toArray()
-        );
+        List<?> values = readCounts(entityType, entityId, arguments);
+        if (!isValidRead(values, counterMetrics.size())) {
+            recoveryService.recoverIfNecessary(entityType, entityId);
+            values = readCounts(entityType, entityId, arguments);
+        }
 
         Map<String, Long> counts = new LinkedHashMap<>();
         for (int index = 0; index < counterMetrics.size(); index++) {
-            Object value = values != null && index < values.size() ? values.get(index) : 0L;
+            Object value = isValidRead(values, counterMetrics.size()) ? values.get(index + 1) : 0L;
             counts.put(counterMetrics.get(index).value(), ((Number) value).longValue());
         }
         return counts;
@@ -136,21 +138,26 @@ public class CounterServiceImpl implements CounterService {
             boolean set
     ) {
         String key = bitmapKey(entityType, entityId, userId, metric);
-        Long changed = redisTemplate.execute(
+        Long sequence = redisTemplate.execute(
                 TOGGLE_SCRIPT,
-                List.of(key),
+                List.of(
+                        key,
+                        CounterKeys.bitmapIndexKey(metric, entityType, entityId),
+                        CounterKeys.sequenceKey(entityType, entityId)
+                ),
                 String.valueOf(BitmapShard.bitOf(userId)),
                 set ? "0" : "1",
                 set ? "1" : "0"
         );
-        boolean stateChanged = Objects.equals(changed, 1L);
+        boolean stateChanged = sequence != null && sequence > 0;
         if (stateChanged) {
             eventPublisher.publish(CounterEvent.of(
                     entityType,
                     entityId,
                     metric,
                     userId,
-                    set ? 1 : -1
+                    set ? 1 : -1,
+                    sequence
             ));
         }
         return stateChanged;
@@ -165,6 +172,19 @@ public class CounterServiceImpl implements CounterService {
     private String bitmapKey(String entityType, String entityId, long userId, CounterMetric metric) {
         validateEntity(entityType, entityId, userId);
         return CounterKeys.bitmapKey(metric, entityType, entityId, BitmapShard.chunkOf(userId));
+    }
+
+    private List<?> readCounts(String entityType, String entityId, List<String> arguments) {
+        return redisTemplate.execute(
+                READ_COUNTS_SCRIPT,
+                List.of(CounterKeys.sdsKey(entityType, entityId)),
+                arguments.toArray()
+        );
+    }
+
+    private boolean isValidRead(List<?> values, int metricCount) {
+        return values != null && values.size() == metricCount + 1
+                && values.getFirst() instanceof Number marker && marker.longValue() == 1;
     }
 
     private void validateEntity(String entityType, String entityId, long userId) {

@@ -118,6 +118,43 @@ class RedisCounterInfrastructureTest {
     }
 
     @Test
+    void shouldRecoverMissingEntitySdsFromRegisteredBitmapShards() {
+        assertThat(counterService.like("knowpost", "103", 5L)).isTrue();
+        assertThat(counterService.fav("knowpost", "103", 6L)).isTrue();
+
+        assertThat(counterService.getCounts("knowpost", "103", List.of("like", "fav")))
+                .isEqualTo(Map.of("like", 1L, "fav", 1L));
+        assertThat(redisTemplate.opsForValue().get(CounterKeys.recoveryFenceKey("knowpost", "103")))
+                .isEqualTo("2");
+    }
+
+    @Test
+    void shouldIgnoreDelayedEntityEventBeforeRecoveryFence() {
+        KnowPostMapper knowPostMapper = mock(KnowPostMapper.class);
+        when(knowPostMapper.findById(104L)).thenReturn(KnowPost.builder().id(104L).creatorId(9L).build());
+        CounterAggregationConsumer consumer = new CounterAggregationConsumer(
+                new ObjectMapper(), redisTemplate, new CounterEventProperties(), knowPostMapper
+        );
+
+        assertThat(counterService.like("knowpost", "104", 7L)).isTrue();
+        assertThat(counterService.getCounts("knowpost", "104", List.of("like", "fav")))
+                .isEqualTo(Map.of("like", 1L, "fav", 0L));
+
+        consumer.aggregate(CounterEvent.of("knowpost", "104", CounterMetric.LIKE, 7L, 1, 1L));
+        consumer.flush();
+
+        assertThat(counterService.getCounts("knowpost", "104", List.of("like", "fav")))
+                .isEqualTo(Map.of("like", 1L, "fav", 0L));
+
+        assertThat(counterService.fav("knowpost", "104", 8L)).isTrue();
+        consumer.aggregate(CounterEvent.of("knowpost", "104", CounterMetric.FAV, 8L, 1, 2L));
+        consumer.flush();
+
+        assertThat(counterService.getCounts("knowpost", "104", List.of("like", "fav")))
+                .isEqualTo(Map.of("like", 1L, "fav", 1L));
+    }
+
+    @Test
     void shouldMaintainIndependentUserSdsCountersWithoutNegativeValues() {
         userCounterService.incrementFollowings(1L, 2);
         userCounterService.incrementFollowers(1L, 3);

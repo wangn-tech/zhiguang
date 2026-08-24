@@ -29,24 +29,34 @@ class CounterServiceImplTest {
     @Mock
     private CounterEventPublisher eventPublisher;
 
+    @Mock
+    private CounterRecoveryService recoveryService;
+
     @Test
     void shouldToggleLikeUsingExpectedBitmapState() {
-        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher);
-        when(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("bm:like:knowpost:100:1")),
+        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher, recoveryService);
+        when(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of(
+                "bm:like:knowpost:100:1", "bmidx:v1:like:knowpost:100", "cntseq:v1:knowpost:100"
+        )),
                 eq("7232"), eq("0"), eq("1"))).thenReturn(1L);
 
         assertThat(counterService.like("knowpost", "100", 40_000L)).isTrue();
 
-        verify(redisTemplate).execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("bm:like:knowpost:100:1")),
+        verify(redisTemplate).execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of(
+                "bm:like:knowpost:100:1", "bmidx:v1:like:knowpost:100", "cntseq:v1:knowpost:100"
+        )),
                 eq("7232"), eq("0"), eq("1"));
         verify(eventPublisher).publish(argThat(event -> event.getMetric().equals("like")
-                && event.getIndex() == 1 && event.getDelta() == 1 && event.getUserId() == 40_000L));
+                && event.getIndex() == 1 && event.getDelta() == 1 && event.getSequence() == 1L
+                && event.getUserId() == 40_000L));
     }
 
     @Test
     void shouldUseIndependentBitmapForFavorite() {
-        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher);
-        when(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("bm:fav:knowpost:100:0")),
+        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher, recoveryService);
+        when(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of(
+                "bm:fav:knowpost:100:0", "bmidx:v1:fav:knowpost:100", "cntseq:v1:knowpost:100"
+        )),
                 eq("1"), eq("1"), eq("0"))).thenReturn(0L);
 
         assertThat(counterService.unfav("knowpost", "100", 1L)).isFalse();
@@ -54,7 +64,7 @@ class CounterServiceImplTest {
 
     @Test
     void shouldRejectUnsupportedOrInvalidIdentifiers() {
-        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher);
+        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher, recoveryService);
 
         assertThatThrownBy(() -> counterService.like("comment", "100", 1L))
                 .isInstanceOf(BusinessException.class)
