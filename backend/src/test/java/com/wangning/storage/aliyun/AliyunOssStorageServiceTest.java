@@ -4,6 +4,8 @@ import com.aliyun.sdk.service.oss2.OSSClient;
 import com.aliyun.sdk.service.oss2.PresignOptions;
 import com.aliyun.sdk.service.oss2.exceptions.OperationException;
 import com.aliyun.sdk.service.oss2.models.DeleteObjectRequest;
+import com.aliyun.sdk.service.oss2.models.GetObjectRequest;
+import com.aliyun.sdk.service.oss2.models.GetObjectResult;
 import com.aliyun.sdk.service.oss2.models.PresignResult;
 import com.aliyun.sdk.service.oss2.models.PutObjectRequest;
 import com.aliyun.sdk.service.oss2.models.PutObjectResult;
@@ -103,6 +105,25 @@ class AliyunOssStorageServiceTest {
         verify(ossClient).deleteObject(requestCaptor.capture());
         assertThat(requestCaptor.getValue().bucket()).isEqualTo("zhiguang-test");
         assertThat(requestCaptor.getValue().key()).isEqualTo("avatars/42/old.png");
+    }
+
+    @Test
+    void shouldDownloadObjectAndCloseSdkResultWithReturnedStream() throws Exception {
+        GetObjectResult sdkResult = mock(GetObjectResult.class);
+        when(sdkResult.body()).thenReturn(new ByteArrayInputStream("正文".getBytes(StandardCharsets.UTF_8)));
+        when(ossClient.getObject(any(GetObjectRequest.class))).thenReturn(sdkResult);
+
+        String content;
+        try (var inputStream = storageService.download("posts/100/content/content.md")) {
+            content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        }
+
+        ArgumentCaptor<GetObjectRequest> requestCaptor = ArgumentCaptor.forClass(GetObjectRequest.class);
+        verify(ossClient).getObject(requestCaptor.capture());
+        assertThat(requestCaptor.getValue().bucket()).isEqualTo("zhiguang-test");
+        assertThat(requestCaptor.getValue().key()).isEqualTo("posts/100/content/content.md");
+        assertThat(content).isEqualTo("正文");
+        verify(sdkResult).close();
     }
 
     @Test

@@ -133,3 +133,4 @@ search:
   index-name: zhiguang_knowpost_v1
   rebuild-on-startup: ${SEARCH_REBUILD_ON_STARTUP:false}
   rebuild-batch-size: 500
+  max-body-bytes: 65536

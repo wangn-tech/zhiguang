@@ -5,6 +5,8 @@ import com.aliyun.sdk.service.oss2.PresignOptions;
 import com.aliyun.sdk.service.oss2.exceptions.OperationException;
 import com.aliyun.sdk.service.oss2.exceptions.ServiceException;
 import com.aliyun.sdk.service.oss2.models.DeleteObjectRequest;
+import com.aliyun.sdk.service.oss2.models.GetObjectRequest;
+import com.aliyun.sdk.service.oss2.models.GetObjectResult;
 import com.aliyun.sdk.service.oss2.models.PresignResult;
 import com.aliyun.sdk.service.oss2.models.PutObjectRequest;
 import com.aliyun.sdk.service.oss2.models.PutObjectResult;
@@ -19,6 +21,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.InputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -85,6 +89,38 @@ public class AliyunOssStorageService implements ObjectStorageService {
             ossClient.deleteObject(request);
         } catch (RuntimeException exception) {
             throw storageFailure("delete", objectKey, exception);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public InputStream download(String objectKey) {
+        validateObjectKey(objectKey);
+        GetObjectRequest request = GetObjectRequest.newBuilder()
+                .bucket(properties.getBucket())
+                .key(objectKey)
+                .build();
+        try {
+            GetObjectResult result = ossClient.getObject(request);
+            InputStream body = result.body();
+            if (body == null) {
+                closeGetObjectResult(result);
+                throw new IllegalStateException("OSS 返回了空对象内容流");
+            }
+            return new FilterInputStream(body) {
+                @Override
+                public void close() throws IOException {
+                    try {
+                        super.close();
+                    } finally {
+                        closeGetObjectResult(result);
+                    }
+                }
+            };
+        } catch (RuntimeException exception) {
+            throw storageFailure("download", objectKey, exception);
         }
     }
 
@@ -209,6 +245,19 @@ public class AliyunOssStorageService implements ObjectStorageService {
                 exception.getClass().getSimpleName()
         );
         return new BusinessException(ErrorCode.STORAGE_OPERATION_FAILED);
+    }
+
+    /**
+     * 关闭 OSS 下载结果，释放 SDK 持有的 HTTP 资源。
+     *
+     * @param result OSS 下载结果
+     */
+    private void closeGetObjectResult(GetObjectResult result) {
+        try {
+            result.close();
+        } catch (Exception exception) {
+            log.warn("关闭 OSS 下载结果失败：exceptionType={}", exception.getClass().getSimpleName());
+        }
     }
 
     /**

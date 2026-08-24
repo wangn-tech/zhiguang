@@ -37,4 +37,8 @@ public class SearchProperties {
     /** 全量回灌时每页读取和每批写入的最大文档数。 */
     @Min(1)
     private int rebuildBatchSize = 500;
+
+    /** 单篇正文建立索引时最多读取的字节数。 */
+    @Min(1)
+    private int maxBodyBytes = 65_536;
 }

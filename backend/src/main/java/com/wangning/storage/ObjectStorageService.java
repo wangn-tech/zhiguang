@@ -38,6 +38,17 @@ public interface ObjectStorageService {
     void delete(String objectKey);
 
     /**
+     * 打开一个对象的内容流。
+     *
+     * <p>调用方必须在读取完成后关闭返回流。该方法仅接受后端生成并已校验的对象键，供搜索索引等
+     * 服务端任务读取对象内容，不能用客户端提供的 URL 替代。</p>
+     *
+     * @param objectKey 后端生成的对象键
+     * @return 对象内容流
+     */
+    InputStream download(String objectKey);
+
+    /**
      * 生成用于 PUT 上传的短期预签名 URL。
      *
      * @param objectKey 后端生成的对象键

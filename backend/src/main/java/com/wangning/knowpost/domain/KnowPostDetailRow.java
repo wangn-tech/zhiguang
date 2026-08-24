@@ -31,6 +31,9 @@ public class KnowPostDetailRow {
     /** 正文稳定公开访问地址。 */
     private String contentUrl;
 
+    /** 正文 OSS 对象键，仅供服务端读取正文和建立搜索索引。 */
+    private String contentObjectKey;
+
     /** 正文 ETag。 */
     private String contentEtag;
 
