@@ -52,6 +52,9 @@ class RedisCounterInfrastructureTest {
     private CounterService counterService;
 
     @Autowired
+    private UserCounterService userCounterService;
+
+    @Autowired
     private StringRedisTemplate redisTemplate;
 
     @BeforeEach
@@ -101,6 +104,19 @@ class RedisCounterInfrastructureTest {
 
         assertThat(counterService.getCounts("knowpost", "102", List.of("like", "fav")))
                 .isEqualTo(Map.of("like", 1L, "fav", 1L));
+    }
+
+    @Test
+    void shouldMaintainIndependentUserSdsCountersWithoutNegativeValues() {
+        userCounterService.incrementFollowings(1L, 2);
+        userCounterService.incrementFollowers(1L, 3);
+        userCounterService.incrementPosts(1L, 4);
+        userCounterService.incrementLikesReceived(1L, 5);
+        userCounterService.incrementFavsReceived(1L, 6);
+        userCounterService.incrementFollowers(1L, -10);
+
+        assertThat(userCounterService.getCounters(1L))
+                .isEqualTo(new UserCounters(2L, 0L, 4L, 5L, 6L));
     }
 
     private <T> List<T> runConcurrently(int taskCount, CheckedSupplier<T> task) throws Exception {

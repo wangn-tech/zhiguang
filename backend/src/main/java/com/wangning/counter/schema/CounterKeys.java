@@ -63,4 +63,14 @@ public final class CounterKeys {
     public static String eventDedupKey(String eventId) {
         return "counter:event:%s".formatted(eventId);
     }
+
+    /**
+     * 获取用户维度计数 SDS 的 Redis 键。
+     *
+     * @param userId 用户 ID
+     * @return 用户计数 SDS 键
+     */
+    public static String userSdsKey(long userId) {
+        return "ucnt:%d".formatted(userId);
+    }
 }

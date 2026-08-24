@@ -1,6 +1,7 @@
 package com.wangning.relation.processor;
 
 import com.wangning.relation.config.RelationEventProperties;
+import com.wangning.counter.service.UserCounterService;
 import com.wangning.relation.domain.UserRelation;
 import com.wangning.relation.event.RelationEvent;
 import com.wangning.relation.mapper.RelationMapper;
@@ -30,6 +31,7 @@ public class RelationEventProcessor {
     private final RelationMapper relationMapper;
     private final StringRedisTemplate redisTemplate;
     private final RelationEventProperties properties;
+    private final UserCounterService userCounterService;
 
     /**
      * 幂等处理一条已提交的 Outbox 关系事件。
@@ -89,6 +91,8 @@ public class RelationEventProcessor {
                 now.toEpochMilli()
         );
         refreshCacheTtl(event.fromUserId(), event.toUserId());
+        userCounterService.incrementFollowings(event.fromUserId(), 1);
+        userCounterService.incrementFollowers(event.toUserId(), 1);
     }
 
     /**
@@ -107,6 +111,8 @@ public class RelationEventProcessor {
                 String.valueOf(event.fromUserId())
         );
         refreshCacheTtl(event.fromUserId(), event.toUserId());
+        userCounterService.incrementFollowings(event.fromUserId(), -1);
+        userCounterService.incrementFollowers(event.toUserId(), -1);
     }
 
     /**

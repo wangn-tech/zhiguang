@@ -1,6 +1,7 @@
 package com.wangning.relation.processor;
 
 import com.wangning.relation.config.RelationEventProperties;
+import com.wangning.counter.service.UserCounterService;
 import com.wangning.relation.domain.UserRelation;
 import com.wangning.relation.event.RelationEvent;
 import com.wangning.relation.mapper.RelationMapper;
@@ -40,6 +41,9 @@ class RelationEventProcessorTest {
     @Mock
     private ZSetOperations<String, String> zSetOperations;
 
+    @Mock
+    private UserCounterService userCounterService;
+
     private RelationEventProcessor processor;
 
     @BeforeEach
@@ -47,7 +51,7 @@ class RelationEventProcessorTest {
         RelationEventProperties properties = new RelationEventProperties();
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(redisTemplate.opsForZSet()).thenReturn(zSetOperations);
-        processor = new RelationEventProcessor(relationMapper, redisTemplate, properties);
+        processor = new RelationEventProcessor(relationMapper, redisTemplate, properties, userCounterService);
     }
 
     @Test
@@ -67,6 +71,8 @@ class RelationEventProcessorTest {
         verify(zSetOperations).add(eq("relation:follower:2"), eq("1"), any(Double.class));
         verify(redisTemplate).expire("relation:following:1", Duration.ofHours(2));
         verify(redisTemplate).expire("relation:follower:2", Duration.ofHours(2));
+        verify(userCounterService).incrementFollowings(1L, 1);
+        verify(userCounterService).incrementFollowers(2L, 1);
     }
 
     @Test
@@ -78,6 +84,8 @@ class RelationEventProcessorTest {
         verify(relationMapper).deactivateFollower(eq(2L), eq(1L), any());
         verify(zSetOperations).remove("relation:following:1", "2");
         verify(zSetOperations).remove("relation:follower:2", "1");
+        verify(userCounterService).incrementFollowings(1L, -1);
+        verify(userCounterService).incrementFollowers(2L, -1);
     }
 
     @Test
