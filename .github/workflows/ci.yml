@@ -51,6 +51,32 @@ jobs:
     name: Backend
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4.11
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_DATABASE: zhiguang
+          MYSQL_USER: zhiguang
+          MYSQL_PASSWORD: zhiguang_ci
+          MYSQL_ROOT_PASSWORD: zhiguang_root_ci
+          TZ: Asia/Shanghai
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -pzhiguang_root_ci --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:8.4.5-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
 
     steps:
       - name: Checkout repository
@@ -70,6 +96,17 @@ jobs:
       - name: Test and build backend
         working-directory: backend
         shell: bash
+        env:
+          # Full-context tests use the application defaults; CI provides only the
+          # two dependencies required by those tests. Testcontainers tests override
+          # these values through @DynamicPropertySource.
+          SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/zhiguang?useSSL=false&allowPublicKeyRetrieval=true&connectionTimeZone=SERVER
+          SPRING_DATASOURCE_USERNAME: zhiguang
+          SPRING_DATASOURCE_PASSWORD: zhiguang_ci
+          SPRING_DATA_REDIS_HOST: 127.0.0.1
+          SPRING_DATA_REDIS_PORT: "6379"
+          # GitHub Actions Redis service uses its image default without a password.
+          SPRING_DATA_REDIS_PASSWORD: ""
         run: |
           if [[ -f mvnw ]]; then
             chmod +x mvnw
