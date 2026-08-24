@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.counter.service.CounterService;
 import com.wangning.knowpost.api.dto.KnowPostDetailResponse;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
@@ -22,6 +23,7 @@ import org.springframework.util.StringUtils;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -37,6 +39,8 @@ public class KnowPostServiceImpl implements KnowPostService {
     private static final String STATUS_DRAFT = "draft";
     private static final String TYPE_IMAGE_TEXT = "image_text";
     private static final String VISIBILITY_PUBLIC = "public";
+    private static final String KNOWPOST = "knowpost";
+    private static final List<String> COUNTER_METRICS = List.of("like", "fav");
     private static final Set<String> VALID_VISIBILITIES = Set.of(
             "public", "followers", "school", "private", "unlisted"
     );
@@ -46,6 +50,7 @@ public class KnowPostServiceImpl implements KnowPostService {
     private final ObjectMapper objectMapper;
     private final UserService userService;
     private final ObjectProvider<ObjectStorageService> objectStorageServiceProvider;
+    private final CounterService counterService;
 
     /**
      * {@inheritDoc}
@@ -220,8 +225,12 @@ public class KnowPostServiceImpl implements KnowPostService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "无权限查看");
         }
 
+        String entityId = String.valueOf(row.getId());
+        Map<String, Long> counts = counterService.getCounts(KNOWPOST, entityId, COUNTER_METRICS);
+        boolean liked = currentUserId != null && counterService.isLiked(KNOWPOST, entityId, currentUserId);
+        boolean faved = currentUserId != null && counterService.isFaved(KNOWPOST, entityId, currentUserId);
         return new KnowPostDetailResponse(
-                String.valueOf(row.getId()),
+                entityId,
                 row.getTitle(),
                 row.getDescription(),
                 row.getContentUrl(),
@@ -231,10 +240,10 @@ public class KnowPostServiceImpl implements KnowPostService {
                 row.getAuthorAvatar(),
                 row.getAuthorNickname(),
                 row.getAuthorTagJson(),
-                0L,
-                0L,
-                false,
-                false,
+                counts.getOrDefault("like", 0L),
+                counts.getOrDefault("fav", 0L),
+                liked,
+                faved,
                 row.getIsTop(),
                 row.getVisible(),
                 row.getType(),

@@ -3,6 +3,7 @@ package com.wangning.knowpost.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.counter.service.CounterService;
 import com.wangning.knowpost.domain.KnowPostFeedRow;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostFeedServiceImpl;
@@ -13,6 +14,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -25,11 +27,14 @@ class KnowPostFeedServiceImplTest {
     @Mock
     private KnowPostMapper knowPostMapper;
 
+    @Mock
+    private CounterService counterService;
+
     private KnowPostFeedService knowPostFeedService;
 
     @BeforeEach
     void setUp() {
-        knowPostFeedService = new KnowPostFeedServiceImpl(knowPostMapper, new ObjectMapper());
+        knowPostFeedService = new KnowPostFeedServiceImpl(knowPostMapper, new ObjectMapper(), counterService);
     }
 
     @Test
@@ -39,6 +44,10 @@ class KnowPostFeedServiceImplTest {
                 row(101L, "第二篇"),
                 row(102L, "第三篇")
         ));
+        when(counterService.getCounts("knowpost", "100", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 5L, "fav", 2L));
+        when(counterService.getCounts("knowpost", "101", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 1L, "fav", 0L));
 
         var response = knowPostFeedService.getPublicFeed(2, 2, null);
 
@@ -50,9 +59,10 @@ class KnowPostFeedServiceImplTest {
         assertThat(response.items().getFirst().coverImage())
                 .isEqualTo("https://static.example.com/posts/100/images/a.png");
         assertThat(response.items().getFirst().tagJson()).isEqualTo("[\"Java\"]");
-        assertThat(response.items().getFirst().likeCount()).isZero();
+        assertThat(response.items().getFirst().likeCount()).isEqualTo(5L);
         assertThat(response.items().getFirst().liked()).isFalse();
         verify(knowPostMapper).listFeedPublic(3, 2);
+        verify(counterService).getCounts("knowpost", "100", List.of("like", "fav"));
     }
 
     @Test
@@ -70,6 +80,8 @@ class KnowPostFeedServiceImplTest {
     @Test
     void shouldQueryPublishedPostsForCurrentAuthor() {
         when(knowPostMapper.listMyPublished(1L, 21, 0)).thenReturn(List.of(row(100L, "我的知文")));
+        when(counterService.getCounts("knowpost", "100", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 0L, "fav", 0L));
 
         var response = knowPostFeedService.getMyPublished(1L, 1, 20);
 

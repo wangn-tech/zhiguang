@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.counter.service.CounterService;
 import com.wangning.knowpost.api.dto.FeedItemResponse;
 import com.wangning.knowpost.api.dto.FeedPageResponse;
 import com.wangning.knowpost.domain.KnowPostFeedRow;
@@ -17,6 +18,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 沿用原项目分页方式的知文 Feed 查询服务。
@@ -27,9 +29,12 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
 
     private static final int DEFAULT_PAGE_SIZE = 20;
     private static final int MAX_PAGE_SIZE = 50;
+    private static final String KNOWPOST = "knowpost";
+    private static final List<String> COUNTER_METRICS = List.of("like", "fav");
 
     private final KnowPostMapper knowPostMapper;
     private final ObjectMapper objectMapper;
+    private final CounterService counterService;
 
     /**
      * {@inheritDoc}
@@ -42,7 +47,7 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
                 pageRequest.size() + 1,
                 pageRequest.offset()
         );
-        return toPageResponse(rows, pageRequest);
+        return toPageResponse(rows, pageRequest, currentUserId);
     }
 
     /**
@@ -60,7 +65,7 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
                 pageRequest.size() + 1,
                 pageRequest.offset()
         );
-        return toPageResponse(rows, pageRequest);
+        return toPageResponse(rows, pageRequest, creatorId);
     }
 
     /**
@@ -83,13 +88,19 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
      * @param pageRequest 分页参数
      * @return 分页响应
      */
-    private FeedPageResponse toPageResponse(List<KnowPostFeedRow> rows, PageRequest pageRequest) {
+    private FeedPageResponse toPageResponse(
+            List<KnowPostFeedRow> rows,
+            PageRequest pageRequest,
+            Long currentUserId
+    ) {
         List<KnowPostFeedRow> safeRows = rows == null ? Collections.emptyList() : rows;
         boolean hasMore = safeRows.size() > pageRequest.size();
         List<KnowPostFeedRow> currentPage = hasMore
                 ? safeRows.subList(0, pageRequest.size())
                 : safeRows;
-        List<FeedItemResponse> items = currentPage.stream().map(this::toItemResponse).toList();
+        List<FeedItemResponse> items = currentPage.stream()
+                .map(row -> toItemResponse(row, currentUserId))
+                .toList();
         return new FeedPageResponse(items, pageRequest.page(), pageRequest.size(), hasMore);
     }
 
@@ -99,11 +110,15 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
      * @param row Mapper 查询行
      * @return 前端兼容的 Feed 响应
      */
-    private FeedItemResponse toItemResponse(KnowPostFeedRow row) {
+    private FeedItemResponse toItemResponse(KnowPostFeedRow row, Long currentUserId) {
         List<String> images = parseStringArray(row.getImgUrls());
         String coverImage = images.isEmpty() ? null : images.getFirst();
+        String entityId = String.valueOf(row.getId());
+        Map<String, Long> counts = counterService.getCounts(KNOWPOST, entityId, COUNTER_METRICS);
+        boolean liked = currentUserId != null && counterService.isLiked(KNOWPOST, entityId, currentUserId);
+        boolean faved = currentUserId != null && counterService.isFaved(KNOWPOST, entityId, currentUserId);
         return new FeedItemResponse(
-                String.valueOf(row.getId()),
+                entityId,
                 row.getTitle(),
                 row.getDescription(),
                 coverImage,
@@ -111,10 +126,10 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
                 row.getAuthorAvatar(),
                 row.getAuthorNickname(),
                 row.getAuthorTagJson(),
-                0L,
-                0L,
-                false,
-                false,
+                counts.getOrDefault("like", 0L),
+                counts.getOrDefault("fav", 0L),
+                liked,
+                faved,
                 row.getIsTop()
         );
     }

@@ -3,6 +3,7 @@ package com.wangning.knowpost.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.counter.service.CounterService;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +50,9 @@ class KnowPostServiceImplTest {
     @Mock
     private ObjectStorageService objectStorageService;
 
+    @Mock
+    private CounterService counterService;
+
     private KnowPostService knowPostService;
 
     @BeforeEach
@@ -57,7 +62,8 @@ class KnowPostServiceImplTest {
                 new SnowflakeIdGenerator(0, 0),
                 new ObjectMapper(),
                 userService,
-                objectStorageServiceProvider
+                objectStorageServiceProvider,
+                counterService
         );
         lenient().when(userService.findById(1L)).thenReturn(Optional.of(User.builder().id(1L).build()));
     }
@@ -203,18 +209,25 @@ class KnowPostServiceImplTest {
     void shouldReturnPublicDetailAndRestrictNonPublicDetailToOwner() {
         KnowPostDetailRow row = detailRow("published", "public");
         when(knowPostMapper.findDetailById(100L)).thenReturn(row);
+        when(counterService.getCounts("knowpost", "100", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 8L, "fav", 3L));
+        when(counterService.isLiked("knowpost", "100", 1L)).thenReturn(true);
+        when(counterService.isFaved("knowpost", "100", 1L)).thenReturn(true);
 
         var publicDetail = knowPostService.getDetail(100L, null);
 
         assertThat(publicDetail.id()).isEqualTo("100");
         assertThat(publicDetail.images()).containsExactly("https://static.example.com/posts/100/images/a.png");
         assertThat(publicDetail.tags()).containsExactly("Java", "MyBatis");
-        assertThat(publicDetail.likeCount()).isZero();
+        assertThat(publicDetail.likeCount()).isEqualTo(8L);
         assertThat(publicDetail.liked()).isFalse();
 
         row.setVisible("private");
         assertErrorCode(() -> knowPostService.getDetail(100L, 2L), ErrorCode.BAD_REQUEST);
-        assertThat(knowPostService.getDetail(100L, 1L).visible()).isEqualTo("private");
+        var ownerDetail = knowPostService.getDetail(100L, 1L);
+        assertThat(ownerDetail.visible()).isEqualTo("private");
+        assertThat(ownerDetail.liked()).isTrue();
+        assertThat(ownerDetail.faved()).isTrue();
     }
 
     @Test
