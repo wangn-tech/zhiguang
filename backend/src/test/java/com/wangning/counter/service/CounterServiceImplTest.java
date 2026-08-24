@@ -1,6 +1,8 @@
 package com.wangning.counter.service;
 
 import com.wangning.common.exception.BusinessException;
+import com.wangning.counter.event.CounterEvent;
+import com.wangning.counter.event.CounterEventPublisher;
 import com.wangning.counter.service.impl.CounterServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.argThat;
 
 @ExtendWith(MockitoExtension.class)
 class CounterServiceImplTest {
@@ -23,9 +26,12 @@ class CounterServiceImplTest {
     @Mock
     private StringRedisTemplate redisTemplate;
 
+    @Mock
+    private CounterEventPublisher eventPublisher;
+
     @Test
     void shouldToggleLikeUsingExpectedBitmapState() {
-        CounterService counterService = new CounterServiceImpl(redisTemplate);
+        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher);
         when(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("bm:like:knowpost:100:1")),
                 eq("7232"), eq("0"), eq("1"))).thenReturn(1L);
 
@@ -33,11 +39,13 @@ class CounterServiceImplTest {
 
         verify(redisTemplate).execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("bm:like:knowpost:100:1")),
                 eq("7232"), eq("0"), eq("1"));
+        verify(eventPublisher).publish(argThat(event -> event.getMetric().equals("like")
+                && event.getIndex() == 1 && event.getDelta() == 1 && event.getUserId() == 40_000L));
     }
 
     @Test
     void shouldUseIndependentBitmapForFavorite() {
-        CounterService counterService = new CounterServiceImpl(redisTemplate);
+        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher);
         when(redisTemplate.execute(org.mockito.ArgumentMatchers.<RedisScript<Long>>any(), eq(List.of("bm:fav:knowpost:100:0")),
                 eq("1"), eq("1"), eq("0"))).thenReturn(0L);
 
@@ -46,7 +54,7 @@ class CounterServiceImplTest {
 
     @Test
     void shouldRejectUnsupportedOrInvalidIdentifiers() {
-        CounterService counterService = new CounterServiceImpl(redisTemplate);
+        CounterService counterService = new CounterServiceImpl(redisTemplate, eventPublisher);
 
         assertThatThrownBy(() -> counterService.like("comment", "100", 1L))
                 .isInstanceOf(BusinessException.class)

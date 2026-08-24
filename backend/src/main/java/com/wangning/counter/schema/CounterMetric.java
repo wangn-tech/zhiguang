@@ -6,15 +6,17 @@ package com.wangning.counter.schema;
 public enum CounterMetric {
 
     /** 点赞。 */
-    LIKE("like"),
+    LIKE("like", 1),
 
     /** 收藏。 */
-    FAV("fav");
+    FAV("fav", 2);
 
     private final String value;
+    private final int index;
 
-    CounterMetric(String value) {
+    CounterMetric(String value, int index) {
         this.value = value;
+        this.index = index;
     }
 
     /**
@@ -24,5 +26,14 @@ public enum CounterMetric {
      */
     public String value() {
         return value;
+    }
+
+    /**
+     * 获取该指标在实体计数 SDS 中的固定段下标。
+     *
+     * @return 从 0 开始的段下标
+     */
+    public int index() {
+        return index;
     }
 }

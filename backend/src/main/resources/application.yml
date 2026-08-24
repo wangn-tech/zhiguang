@@ -101,3 +101,13 @@ relation:
       filter: zhiguang\.outbox
       batch-size: 1000
       poll-interval: PT1S
+
+counter:
+  events:
+    # Kafka 未启动时保持关闭；启用后互动状态变化会异步折叠为知文计数。
+    enabled: ${COUNTER_EVENTS_ENABLED:false}
+    topic: counter-events
+    consumer-group: counter-aggregation
+    dedup-ttl: P7D
+    flush-interval: PT1S
+    flush-batch-size: 100

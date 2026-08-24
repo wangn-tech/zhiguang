@@ -1,5 +1,8 @@
 package com.wangning.counter.service;
 
+import java.util.List;
+import java.util.Map;
+
 /**
  * 内容点赞和收藏状态服务。
  */
@@ -44,6 +47,18 @@ public interface CounterService {
      * @return 状态由已收藏变为未收藏时返回 {@code true}
      */
     boolean unfav(String entityType, String entityId, long userId);
+
+    /**
+     * 读取指定实体的互动计数。
+     *
+     * <p>计数由 Kafka 消费链路异步聚合，因此与刚完成的互动状态切换存在短暂延迟。</p>
+     *
+     * @param entityType 实体类型
+     * @param entityId 实体 ID
+     * @param metrics 需要读取的指标，只支持 {@code like}、{@code fav}
+     * @return 指标名到计数值的映射
+     */
+    Map<String, Long> getCounts(String entityType, String entityId, List<String> metrics);
 
     /**
      * 判断用户是否已点赞内容。

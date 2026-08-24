@@ -1,5 +1,10 @@
 package com.wangning.counter.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wangning.counter.config.CounterEventProperties;
+import com.wangning.counter.event.CounterAggregationConsumer;
+import com.wangning.counter.event.CounterEvent;
+import com.wangning.counter.schema.CounterMetric;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +20,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -76,6 +82,25 @@ class RedisCounterInfrastructureTest {
         assertThat(results).contains(true, false);
         assertThat(results.stream().filter(Boolean::booleanValue)).hasSize(1);
         assertThat(counterService.isLiked("knowpost", "101", 2L)).isTrue();
+    }
+
+    @Test
+    void shouldFoldDeduplicatedEventsIntoEntitySds() {
+        CounterAggregationConsumer consumer = new CounterAggregationConsumer(
+                new ObjectMapper(),
+                redisTemplate,
+                new CounterEventProperties()
+        );
+        CounterEvent like = CounterEvent.of("knowpost", "102", CounterMetric.LIKE, 1L, 1);
+        CounterEvent fav = CounterEvent.of("knowpost", "102", CounterMetric.FAV, 1L, 1);
+
+        consumer.aggregate(like);
+        consumer.aggregate(like);
+        consumer.aggregate(fav);
+        consumer.flush();
+
+        assertThat(counterService.getCounts("knowpost", "102", List.of("like", "fav")))
+                .isEqualTo(Map.of("like", 1L, "fav", 1L));
     }
 
     private <T> List<T> runConcurrently(int taskCount, CheckedSupplier<T> task) throws Exception {
