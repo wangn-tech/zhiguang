@@ -6,12 +6,16 @@ import com.wangning.counter.schema.CounterKeys;
 import com.wangning.counter.schema.UserCounterMetric;
 import com.wangning.counter.service.UserCounterService;
 import com.wangning.counter.service.UserCounters;
+import com.wangning.counter.service.CounterService;
+import com.wangning.knowpost.mapper.KnowPostMapper;
+import com.wangning.relation.mapper.RelationMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 基于固定五段 Redis SDS 的用户计数服务实现。
@@ -79,8 +83,38 @@ public class UserCounterServiceImpl implements UserCounterService {
             end
             return result
             """, List.class);
+    private static final RedisScript<Long> VALIDATE_STRUCTURE_SCRIPT = RedisScript.of("""
+            local value = redis.call('GET', KEYS[1])
+            if redis.call('EXISTS', KEYS[2]) == 1
+                    and value and string.len(value) == tonumber(ARGV[1]) then
+                return 1
+            end
+            return 0
+            """, Long.class);
+    private static final RedisScript<Long> REBUILD_SCRIPT = RedisScript.of("""
+            local function write32be(number)
+                if number < 0 then number = 0 end
+                if number > 4294967295 then number = 4294967295 end
+                local bytes = {}
+                for index = 4, 1, -1 do
+                    bytes[index] = number % 256
+                    number = math.floor(number / 256)
+                end
+                return string.char(unpack(bytes))
+            end
+            local value = ''
+            for index = 1, 5 do
+                value = value .. write32be(tonumber(ARGV[index]))
+            end
+            redis.call('SET', KEYS[1], value)
+            redis.call('SET', KEYS[2], '1')
+            return 1
+            """, Long.class);
 
     private final StringRedisTemplate redisTemplate;
+    private final RelationMapper relationMapper;
+    private final KnowPostMapper knowPostMapper;
+    private final CounterService counterService;
 
     /** {@inheritDoc} */
     @Override
@@ -129,6 +163,69 @@ public class UserCounterServiceImpl implements UserCounterService {
                 readValue(values, UserCounterMetric.LIKES_RECEIVED),
                 readValue(values, UserCounterMetric.FAVS_RECEIVED)
         );
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public boolean isInitialized(long userId) {
+        validateUserId(userId);
+        Long valid = redisTemplate.execute(
+                VALIDATE_STRUCTURE_SCRIPT,
+                List.of(CounterKeys.userSdsKey(userId), CounterKeys.userCounterInitializedKey(userId)),
+                String.valueOf(FIELD_SIZE * FIELD_COUNT)
+        );
+        return valid != null && valid == 1L;
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public UserCounters getOrRebuildCounters(long userId) {
+        validateUserId(userId);
+        if (!isInitialized(userId)) {
+            return rebuildCounters(userId);
+        }
+        return getCounters(userId);
+    }
+
+    /** {@inheritDoc} */
+    @Override
+    public UserCounters rebuildCounters(long userId) {
+        validateUserId(userId);
+        long followings = relationMapper.countFollowings(userId);
+        long followers = relationMapper.countFollowers(userId);
+        List<Long> postIds = knowPostMapper.listPublishedIdsByCreator(userId);
+        List<Long> safePostIds = postIds == null ? List.of() : postIds;
+        long likesReceived = 0L;
+        long favsReceived = 0L;
+        for (Long postId : safePostIds) {
+            if (postId == null) {
+                continue;
+            }
+            Map<String, Long> counts = counterService.getCounts(
+                    "knowpost",
+                    String.valueOf(postId),
+                    List.of("like", "fav")
+            );
+            likesReceived += counts.getOrDefault("like", 0L);
+            favsReceived += counts.getOrDefault("fav", 0L);
+        }
+        UserCounters counters = new UserCounters(
+                followings,
+                followers,
+                safePostIds.size(),
+                likesReceived,
+                favsReceived
+        );
+        redisTemplate.execute(
+                REBUILD_SCRIPT,
+                List.of(CounterKeys.userSdsKey(userId), CounterKeys.userCounterInitializedKey(userId)),
+                String.valueOf(counters.followings()),
+                String.valueOf(counters.followers()),
+                String.valueOf(counters.posts()),
+                String.valueOf(counters.likesReceived()),
+                String.valueOf(counters.favsReceived())
+        );
+        return counters;
     }
 
     private void increment(long userId, UserCounterMetric metric, int delta) {

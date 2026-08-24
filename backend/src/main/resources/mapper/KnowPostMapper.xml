@@ -159,6 +159,13 @@
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <select id="listPublishedIdsByCreator" resultType="long">
+        SELECT id
+        FROM know_posts
+        WHERE creator_id = #{creatorId}
+          AND status = 'published'
+    </select>
+
     <select id="findDetailById" resultType="com.wangning.knowpost.domain.KnowPostDetailRow">
         SELECT
             p.id,

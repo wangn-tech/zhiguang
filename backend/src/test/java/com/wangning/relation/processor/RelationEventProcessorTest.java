@@ -57,6 +57,8 @@ class RelationEventProcessorTest {
     @Test
     void shouldCreateFollowerAndRefreshRelationshipCaches() {
         when(valueOperations.setIfAbsent("relation:event:101", "1", Duration.ofDays(7))).thenReturn(true);
+        when(userCounterService.isInitialized(1L)).thenReturn(true);
+        when(userCounterService.isInitialized(2L)).thenReturn(true);
 
         processor.process(101L, new RelationEvent("FollowCreated", 1L, 2L, 99L));
 
@@ -78,6 +80,8 @@ class RelationEventProcessorTest {
     @Test
     void shouldCancelFollowerAndRemoveRelationshipCaches() {
         when(valueOperations.setIfAbsent("relation:event:102", "1", Duration.ofDays(7))).thenReturn(true);
+        when(userCounterService.isInitialized(1L)).thenReturn(true);
+        when(userCounterService.isInitialized(2L)).thenReturn(true);
 
         processor.process(102L, new RelationEvent("FollowCanceled", 1L, 2L, 99L));
 

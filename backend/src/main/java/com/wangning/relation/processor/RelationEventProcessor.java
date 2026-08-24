@@ -91,8 +91,12 @@ public class RelationEventProcessor {
                 now.toEpochMilli()
         );
         refreshCacheTtl(event.fromUserId(), event.toUserId());
-        userCounterService.incrementFollowings(event.fromUserId(), 1);
-        userCounterService.incrementFollowers(event.toUserId(), 1);
+        if (userCounterService.isInitialized(event.fromUserId())) {
+            userCounterService.incrementFollowings(event.fromUserId(), 1);
+        }
+        if (userCounterService.isInitialized(event.toUserId())) {
+            userCounterService.incrementFollowers(event.toUserId(), 1);
+        }
     }
 
     /**
@@ -111,8 +115,12 @@ public class RelationEventProcessor {
                 String.valueOf(event.fromUserId())
         );
         refreshCacheTtl(event.fromUserId(), event.toUserId());
-        userCounterService.incrementFollowings(event.fromUserId(), -1);
-        userCounterService.incrementFollowers(event.toUserId(), -1);
+        if (userCounterService.isInitialized(event.fromUserId())) {
+            userCounterService.incrementFollowings(event.fromUserId(), -1);
+        }
+        if (userCounterService.isInitialized(event.toUserId())) {
+            userCounterService.incrementFollowers(event.toUserId(), -1);
+        }
     }
 
     /**

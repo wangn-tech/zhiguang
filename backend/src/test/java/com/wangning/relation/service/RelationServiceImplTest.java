@@ -3,6 +3,8 @@ package com.wangning.relation.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.counter.service.UserCounterService;
+import com.wangning.counter.service.UserCounters;
 import com.wangning.relation.domain.UserRelation;
 import com.wangning.relation.domain.RelationListItem;
 import com.wangning.relation.mapper.RelationMapper;
@@ -45,6 +47,9 @@ class RelationServiceImplTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private UserCounterService userCounterService;
+
     private RelationService relationService;
 
     @BeforeEach
@@ -53,7 +58,8 @@ class RelationServiceImplTest {
                 relationMapper,
                 outboxMapper,
                 userService,
-                new ObjectMapper()
+                new ObjectMapper(),
+                userCounterService
         );
         lenient().when(userService.findById(2L)).thenReturn(Optional.of(User.builder().id(2L).build()));
     }
@@ -184,13 +190,14 @@ class RelationServiceImplTest {
     }
 
     @Test
-    void shouldReturnRelationCountersWithPendingInteractionCountsAsZero() {
-        when(relationMapper.countFollowings(1L)).thenReturn(12L);
-        when(relationMapper.countFollowers(1L)).thenReturn(34L);
+    void shouldReturnAllCountersFromUserCounterSds() {
+        when(userCounterService.getOrRebuildCounters(1L))
+                .thenReturn(new UserCounters(12L, 34L, 5L, 67L, 8L));
 
         RelationCountersResponse counters = relationService.getCounters(1L);
 
-        assertThat(counters).isEqualTo(new RelationCountersResponse(12L, 34L, 0L, 0L, 0L));
+        assertThat(counters).isEqualTo(new RelationCountersResponse(12L, 34L, 5L, 67L, 8L));
+        verify(userCounterService).getOrRebuildCounters(1L);
     }
 
     private User publicUser(long id, String nickname) {

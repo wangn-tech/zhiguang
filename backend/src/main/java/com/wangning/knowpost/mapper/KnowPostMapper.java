@@ -116,6 +116,14 @@ public interface KnowPostMapper {
     );
 
     /**
+     * 查询用户全部已发布知文的 ID，用于重建用户维度计数。
+     *
+     * @param creatorId 作者用户 ID
+     * @return 已发布知文 ID 列表
+     */
+    List<Long> listPublishedIdsByCreator(@Param("creatorId") long creatorId);
+
+    /**
      * 查询包含作者展示信息的知文详情。
      *
      * @param id 知文 ID

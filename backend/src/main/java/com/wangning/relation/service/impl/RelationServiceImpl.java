@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
+import com.wangning.counter.service.UserCounterService;
+import com.wangning.counter.service.UserCounters;
 import com.wangning.relation.domain.UserRelation;
 import com.wangning.relation.domain.RelationListItem;
 import com.wangning.relation.event.RelationEvent;
@@ -44,6 +46,7 @@ public class RelationServiceImpl implements RelationService {
     private final OutboxMapper outboxMapper;
     private final UserService userService;
     private final ObjectMapper objectMapper;
+    private final UserCounterService userCounterService;
 
     /**
      * {@inheritDoc}
@@ -136,12 +139,13 @@ public class RelationServiceImpl implements RelationService {
         if (userId <= 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "用户 ID 必须为正整数");
         }
+        UserCounters counters = userCounterService.getOrRebuildCounters(userId);
         return new RelationCountersResponse(
-                relationMapper.countFollowings(userId),
-                relationMapper.countFollowers(userId),
-                0L,
-                0L,
-                0L
+                counters.followings(),
+                counters.followers(),
+                counters.posts(),
+                counters.likesReceived(),
+                counters.favsReceived()
         );
     }
 

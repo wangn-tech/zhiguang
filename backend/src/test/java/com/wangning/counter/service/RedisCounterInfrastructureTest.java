@@ -5,6 +5,7 @@ import com.wangning.counter.config.CounterEventProperties;
 import com.wangning.counter.event.CounterAggregationConsumer;
 import com.wangning.counter.event.CounterEvent;
 import com.wangning.counter.schema.CounterMetric;
+import com.wangning.counter.schema.CounterKeys;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -95,6 +96,7 @@ class RedisCounterInfrastructureTest {
     void shouldFoldDeduplicatedEventsIntoEntitySds() {
         KnowPostMapper knowPostMapper = mock(KnowPostMapper.class);
         when(knowPostMapper.findById(102L)).thenReturn(KnowPost.builder().id(102L).creatorId(9L).build());
+        redisTemplate.opsForValue().set(CounterKeys.userCounterInitializedKey(9L), "1");
         CounterAggregationConsumer consumer = new CounterAggregationConsumer(
                 new ObjectMapper(),
                 redisTemplate,

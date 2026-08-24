@@ -23,6 +23,8 @@ public class UserCounterEventListener {
      */
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onKnowPostPublished(KnowPostPublishedEvent event) {
-        userCounterService.incrementPosts(event.creatorId(), 1);
+        if (userCounterService.isInitialized(event.creatorId())) {
+            userCounterService.incrementPosts(event.creatorId(), 1);
+        }
     }
 }

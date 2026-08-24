@@ -5,9 +5,9 @@ package com.wangning.relation.api.dto;
  *
  * @param followings 关注数
  * @param followers 粉丝数
- * @param posts 已发布知文数，计数模块接入前为 0
- * @param likedPosts 获赞数，计数模块接入前为 0
- * @param favedPosts 获收藏数，计数模块接入前为 0
+ * @param posts 已发布知文数
+ * @param likedPosts 获赞数
+ * @param favedPosts 获收藏数
  */
 public record RelationCountersResponse(
         long followings,

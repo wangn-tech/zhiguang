@@ -43,32 +43,34 @@ public class CounterAggregationConsumer {
             redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
             redis.call('SADD', KEYS[2], KEYS[1])
 
-            local userField = tonumber(ARGV[4])
-            local userValue = redis.call('GET', KEYS[4])
-            if not userValue or string.len(userValue) ~= 20 then
-                userValue = string.rep(string.char(0), 20)
-            end
-            local function read32be(source, offset)
-                local b1, b2, b3, b4 = string.byte(source, offset + 1, offset + 4)
-                return ((b1 or 0) * 16777216) + ((b2 or 0) * 65536) + ((b3 or 0) * 256) + (b4 or 0)
-            end
-            local function write32be(number)
-                local bytes = {}
-                for index = 4, 1, -1 do
-                    bytes[index] = number % 256
-                    number = math.floor(number / 256)
+            if redis.call('EXISTS', KEYS[5]) == 1 then
+                local userField = tonumber(ARGV[4])
+                local userValue = redis.call('GET', KEYS[4])
+                if not userValue or string.len(userValue) ~= 20 then
+                    userValue = string.rep(string.char(0), 20)
                 end
-                return string.char(unpack(bytes))
+                local function read32be(source, offset)
+                    local b1, b2, b3, b4 = string.byte(source, offset + 1, offset + 4)
+                    return ((b1 or 0) * 16777216) + ((b2 or 0) * 65536) + ((b3 or 0) * 256) + (b4 or 0)
+                end
+                local function write32be(number)
+                    local bytes = {}
+                    for index = 4, 1, -1 do
+                        bytes[index] = number % 256
+                        number = math.floor(number / 256)
+                    end
+                    return string.char(unpack(bytes))
+                end
+                local offset = userField * 4
+                local nextValue = read32be(userValue, offset) + tonumber(ARGV[2])
+                if nextValue < 0 then
+                    nextValue = 0
+                end
+                userValue = string.sub(userValue, 1, offset)
+                        .. write32be(nextValue)
+                        .. string.sub(userValue, offset + 5)
+                redis.call('SET', KEYS[4], userValue)
             end
-            local offset = userField * 4
-            local nextValue = read32be(userValue, offset) + tonumber(ARGV[2])
-            if nextValue < 0 then
-                nextValue = 0
-            end
-            userValue = string.sub(userValue, 1, offset)
-                    .. write32be(nextValue)
-                    .. string.sub(userValue, offset + 5)
-            redis.call('SET', KEYS[4], userValue)
             return 1
             """, Long.class);
     private static final RedisScript<Long> FOLD_BUCKET_SCRIPT = RedisScript.of("""
@@ -163,7 +165,8 @@ public class CounterAggregationConsumer {
                         CounterKeys.aggregationKey(event.getEntityType(), event.getEntityId()),
                         CounterKeys.aggregationIndexKey(),
                         CounterKeys.eventDedupKey(event.getEventId()),
-                        CounterKeys.userSdsKey(knowPost.getCreatorId())
+                        CounterKeys.userSdsKey(knowPost.getCreatorId()),
+                        CounterKeys.userCounterInitializedKey(knowPost.getCreatorId())
                 ),
                 String.valueOf(event.getIndex()),
                 String.valueOf(event.getDelta()),

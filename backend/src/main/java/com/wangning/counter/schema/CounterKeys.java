@@ -73,4 +73,14 @@ public final class CounterKeys {
     public static String userSdsKey(long userId) {
         return "ucnt:%d".formatted(userId);
     }
+
+    /**
+     * 获取标记用户 SDS 已由事实数据回填的 Redis 键。
+     *
+     * @param userId 用户 ID
+     * @return 用户计数初始化标记键
+     */
+    public static String userCounterInitializedKey(long userId) {
+        return "ucnt:v1:initialized:%d".formatted(userId);
+    }
 }
