@@ -72,7 +72,13 @@ public class SearchIndexService {
             return request;
         });
         if (response.errors()) {
-            throw new IOException("Elasticsearch 批量写入知文索引失败");
+            String failures = response.items().stream()
+                    .filter(item -> item.error() != null)
+                    .limit(3)
+                    .map(item -> "id=" + item.id() + ", type=" + item.error().type()
+                            + ", reason=" + item.error().reason())
+                    .collect(java.util.stream.Collectors.joining("; "));
+            throw new IOException("Elasticsearch 批量写入知文索引失败: " + failures);
         }
     }
 

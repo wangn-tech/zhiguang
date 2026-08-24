@@ -3,6 +3,8 @@ package com.wangning.search.config;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,12 +24,18 @@ public class SearchConfiguration {
      * 创建 Elasticsearch 官方 Java Client。
      *
      * @param properties 已绑定的搜索配置
+     * @param objectMapper Spring 配置的 JSON 映射器，包含 Java Time 支持
      * @return Elasticsearch 客户端
      */
     @Bean(destroyMethod = "close")
-    public ElasticsearchClient elasticsearchClient(SearchProperties properties) {
+    public ElasticsearchClient elasticsearchClient(SearchProperties properties, ObjectMapper objectMapper) {
         RestClient restClient = RestClient.builder(HttpHost.create(properties.getUri())).build();
-        RestClientTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
+        ObjectMapper elasticsearchObjectMapper = objectMapper.copy()
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        RestClientTransport transport = new RestClientTransport(
+                restClient,
+                new JacksonJsonpMapper(elasticsearchObjectMapper)
+        );
         return new ElasticsearchClient(transport);
     }
 }

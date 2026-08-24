@@ -64,6 +64,9 @@ jobs:
           cache: maven
           cache-dependency-path: backend/pom.xml
 
+      - name: Build Elasticsearch test image with IK
+        run: docker build --tag zhiguang-elasticsearch:9.2.1 --file deploy/elasticsearch/Dockerfile .
+
       - name: Test and build backend
         working-directory: backend
         shell: bash
