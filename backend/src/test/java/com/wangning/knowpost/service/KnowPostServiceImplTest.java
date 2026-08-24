@@ -7,6 +7,7 @@ import com.wangning.counter.service.CounterService;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
+import com.wangning.knowpost.event.KnowPostPublishedEvent;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostServiceImpl;
 import com.wangning.storage.ObjectStorageService;
@@ -19,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Map;
@@ -53,6 +55,9 @@ class KnowPostServiceImplTest {
     @Mock
     private CounterService counterService;
 
+    @Mock
+    private ApplicationEventPublisher applicationEventPublisher;
+
     private KnowPostService knowPostService;
 
     @BeforeEach
@@ -63,7 +68,8 @@ class KnowPostServiceImplTest {
                 new ObjectMapper(),
                 userService,
                 objectStorageServiceProvider,
-                counterService
+                counterService,
+                applicationEventPublisher
         );
         lenient().when(userService.findById(1L)).thenReturn(Optional.of(User.builder().id(1L).build()));
     }
@@ -181,6 +187,7 @@ class KnowPostServiceImplTest {
         assertErrorCode(() -> knowPostService.publish(1L, 100L), ErrorCode.BAD_REQUEST);
 
         verify(knowPostMapper, times(2)).publish(100L, 1L);
+        verify(applicationEventPublisher).publishEvent(new KnowPostPublishedEvent(1L));
     }
 
     @Test

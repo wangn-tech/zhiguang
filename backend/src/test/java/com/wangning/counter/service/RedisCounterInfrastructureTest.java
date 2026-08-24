@@ -5,6 +5,8 @@ import com.wangning.counter.config.CounterEventProperties;
 import com.wangning.counter.event.CounterAggregationConsumer;
 import com.wangning.counter.event.CounterEvent;
 import com.wangning.counter.schema.CounterMetric;
+import com.wangning.knowpost.domain.KnowPost;
+import com.wangning.knowpost.mapper.KnowPostMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +29,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
@@ -89,10 +93,13 @@ class RedisCounterInfrastructureTest {
 
     @Test
     void shouldFoldDeduplicatedEventsIntoEntitySds() {
+        KnowPostMapper knowPostMapper = mock(KnowPostMapper.class);
+        when(knowPostMapper.findById(102L)).thenReturn(KnowPost.builder().id(102L).creatorId(9L).build());
         CounterAggregationConsumer consumer = new CounterAggregationConsumer(
                 new ObjectMapper(),
                 redisTemplate,
-                new CounterEventProperties()
+                new CounterEventProperties(),
+                knowPostMapper
         );
         CounterEvent like = CounterEvent.of("knowpost", "102", CounterMetric.LIKE, 1L, 1);
         CounterEvent fav = CounterEvent.of("knowpost", "102", CounterMetric.FAV, 1L, 1);
@@ -104,6 +111,8 @@ class RedisCounterInfrastructureTest {
 
         assertThat(counterService.getCounts("knowpost", "102", List.of("like", "fav")))
                 .isEqualTo(Map.of("like", 1L, "fav", 1L));
+        assertThat(userCounterService.getCounters(9L))
+                .isEqualTo(new UserCounters(0L, 0L, 0L, 1L, 1L));
     }
 
     @Test

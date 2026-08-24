@@ -10,12 +10,14 @@ import com.wangning.knowpost.api.dto.KnowPostDetailResponse;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
+import com.wangning.knowpost.event.KnowPostPublishedEvent;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.KnowPostService;
 import com.wangning.storage.ObjectStorageService;
 import com.wangning.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -51,6 +53,7 @@ public class KnowPostServiceImpl implements KnowPostService {
     private final UserService userService;
     private final ObjectProvider<ObjectStorageService> objectStorageServiceProvider;
     private final CounterService counterService;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * {@inheritDoc}
@@ -169,6 +172,7 @@ public class KnowPostServiceImpl implements KnowPostService {
         validateCreator(creatorId);
         validatePostId(id);
         ensureSingleRow(knowPostMapper.publish(id, creatorId), "草稿不存在或无权限");
+        applicationEventPublisher.publishEvent(new KnowPostPublishedEvent(creatorId));
     }
 
     /**

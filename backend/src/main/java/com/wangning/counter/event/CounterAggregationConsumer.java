@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.counter.config.CounterEventProperties;
 import com.wangning.counter.schema.CounterKeys;
 import com.wangning.counter.schema.CounterMetric;
+import com.wangning.counter.schema.UserCounterMetric;
+import com.wangning.knowpost.domain.KnowPost;
+import com.wangning.knowpost.mapper.KnowPostMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,6 +42,33 @@ public class CounterAggregationConsumer {
             end
             redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
             redis.call('SADD', KEYS[2], KEYS[1])
+
+            local userField = tonumber(ARGV[4])
+            local userValue = redis.call('GET', KEYS[4])
+            if not userValue or string.len(userValue) ~= 20 then
+                userValue = string.rep(string.char(0), 20)
+            end
+            local function read32be(source, offset)
+                local b1, b2, b3, b4 = string.byte(source, offset + 1, offset + 4)
+                return ((b1 or 0) * 16777216) + ((b2 or 0) * 65536) + ((b3 or 0) * 256) + (b4 or 0)
+            end
+            local function write32be(number)
+                local bytes = {}
+                for index = 4, 1, -1 do
+                    bytes[index] = number % 256
+                    number = math.floor(number / 256)
+                end
+                return string.char(unpack(bytes))
+            end
+            local offset = userField * 4
+            local nextValue = read32be(userValue, offset) + tonumber(ARGV[2])
+            if nextValue < 0 then
+                nextValue = 0
+            end
+            userValue = string.sub(userValue, 1, offset)
+                    .. write32be(nextValue)
+                    .. string.sub(userValue, offset + 5)
+            redis.call('SET', KEYS[4], userValue)
             return 1
             """, Long.class);
     private static final RedisScript<Long> FOLD_BUCKET_SCRIPT = RedisScript.of("""
@@ -94,6 +124,7 @@ public class CounterAggregationConsumer {
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
     private final CounterEventProperties properties;
+    private final KnowPostMapper knowPostMapper;
 
     /**
      * 消费一条 Kafka 互动计数事件。
@@ -122,16 +153,22 @@ public class CounterAggregationConsumer {
      */
     public void aggregate(CounterEvent event) {
         validate(event);
+        KnowPost knowPost = knowPostMapper.findById(Long.parseLong(event.getEntityId()));
+        if (knowPost == null || knowPost.getCreatorId() == null) {
+            throw new IllegalArgumentException("计数事件对应的知文不存在");
+        }
         redisTemplate.execute(
                 ADD_TO_BUCKET_SCRIPT,
                 List.of(
                         CounterKeys.aggregationKey(event.getEntityType(), event.getEntityId()),
                         CounterKeys.aggregationIndexKey(),
-                        CounterKeys.eventDedupKey(event.getEventId())
+                        CounterKeys.eventDedupKey(event.getEventId()),
+                        CounterKeys.userSdsKey(knowPost.getCreatorId())
                 ),
                 String.valueOf(event.getIndex()),
                 String.valueOf(event.getDelta()),
-                String.valueOf(properties.getDedupTtl().toMillis())
+                String.valueOf(properties.getDedupTtl().toMillis()),
+                String.valueOf(userMetric(event).index())
         );
     }
 
@@ -182,5 +219,11 @@ public class CounterAggregationConsumer {
         if (!metricMatchesSchema) {
             throw new IllegalArgumentException("计数事件指标与 Schema 不匹配");
         }
+    }
+
+    private UserCounterMetric userMetric(CounterEvent event) {
+        return CounterMetric.LIKE.value().equals(event.getMetric())
+                ? UserCounterMetric.LIKES_RECEIVED
+                : UserCounterMetric.FAVS_RECEIVED;
     }
 }
