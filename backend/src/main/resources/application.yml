@@ -124,3 +124,12 @@ cache:
     detail-ttl: PT10M
     public-feed-ttl: PT2M
     mine-feed-ttl: PT1M
+
+search:
+  # 本地未启动 Elasticsearch 时保持关闭；启用搜索时设置 SEARCH_ENABLED=true。
+  enabled: ${SEARCH_ENABLED:false}
+  uri: ${SEARCH_URI:http://localhost:9200}
+  index-alias: zhiguang_knowpost
+  index-name: zhiguang_knowpost_v1
+  rebuild-on-startup: ${SEARCH_REBUILD_ON_STARTUP:false}
+  rebuild-batch-size: 500

@@ -128,7 +128,10 @@ services:
       - backend
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.1
+    build:
+      context: .
+      dockerfile: deploy/elasticsearch/Dockerfile
+    image: zhiguang-elasticsearch:9.2.1
     restart: unless-stopped
     environment:
       discovery.type: single-node

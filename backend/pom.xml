@@ -21,6 +21,7 @@
         <java.version>21</java.version>
         <testcontainers.version>1.21.4</testcontainers.version>
         <aliyun-oss.version>0.5.1</aliyun-oss.version>
+        <elasticsearch-java.version>9.2.1</elasticsearch-java.version>
     </properties>
 
     <dependencies>
@@ -113,6 +114,20 @@
             <groupId>com.alibaba.otter</groupId>
             <artifactId>canal.protocol</artifactId>
             <version>1.1.8</version>
+        </dependency>
+
+        <!-- Elasticsearch 官方 Java Client：知文全文检索和标题联想 -->
+        <dependency>
+            <groupId>co.elastic.clients</groupId>
+            <artifactId>elasticsearch-java</artifactId>
+            <version>${elasticsearch-java.version}</version>
+        </dependency>
+
+        <!-- Elasticsearch Java Client 的 HTTP 传输实现 -->
+        <dependency>
+            <groupId>org.elasticsearch.client</groupId>
+            <artifactId>elasticsearch-rest-client</artifactId>
+            <version>${elasticsearch-java.version}</version>
         </dependency>
 
         <!-- 阿里云 OSS Java SDK V2：对象上传、删除及预签名 URL -->
