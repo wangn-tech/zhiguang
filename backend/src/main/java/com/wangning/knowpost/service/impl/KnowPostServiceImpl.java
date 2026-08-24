@@ -16,6 +16,9 @@ import com.wangning.knowpost.event.KnowPostPublishedEvent;
 import com.wangning.knowpost.event.KnowPostChangedEvent;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.KnowPostService;
+import com.wangning.relation.outbox.OutboxMapper;
+import com.wangning.relation.outbox.OutboxRecord;
+import com.wangning.search.event.KnowPostIndexEvent;
 import com.wangning.storage.ObjectStorageService;
 import com.wangning.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +61,7 @@ public class KnowPostServiceImpl implements KnowPostService {
     private final CounterService counterService;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final KnowPostDetailCacheService knowPostDetailCacheService;
+    private final OutboxMapper outboxMapper;
 
     /**
      * {@inheritDoc}
@@ -297,13 +301,46 @@ public class KnowPostServiceImpl implements KnowPostService {
     }
 
     /**
-     * 发布知文数据变更事件，由事务提交后的监听器失效缓存。
+     * 发布知文数据变更事件。
+     *
+     * <p>搜索 Outbox 与知文数据写入处于同一事务，事务提交后才会被 Canal 捕获；本地事件则由
+     * 事务提交后的监听器失效缓存。</p>
      *
      * @param id 知文 ID
      * @param creatorId 作者用户 ID
      */
     private void publishChangedEvent(long id, long creatorId) {
+        writeSearchOutbox(id);
         applicationEventPublisher.publishEvent(new KnowPostChangedEvent(id, creatorId));
+    }
+
+    /**
+     * 在当前事务内写入一条知文索引请求。
+     *
+     * <p>事件不携带可变的知文快照，消费者按知文 ID 读取 MySQL 当前状态。删除或改为非公开状态时，
+     * 消费者会将对应 Elasticsearch 文档写为 tombstone。</p>
+     *
+     * @param knowPostId 知文 ID
+     */
+    private void writeSearchOutbox(long knowPostId) {
+        KnowPostIndexEvent event = new KnowPostIndexEvent(KnowPostIndexEvent.TYPE, knowPostId);
+        String payload;
+        try {
+            payload = objectMapper.writeValueAsString(event);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("知文搜索索引事件序列化失败", exception);
+        }
+        int affectedRows = outboxMapper.insert(OutboxRecord.builder()
+                .id(snowflakeIdGenerator.nextId())
+                .aggregateType("knowpost")
+                .aggregateId(knowPostId)
+                .type(KnowPostIndexEvent.TYPE)
+                .payload(payload)
+                .createdAt(Instant.now())
+                .build());
+        if (affectedRows != 1) {
+            throw new IllegalStateException("知文搜索索引 Outbox 事件写入失败");
+        }
     }
 
     /**

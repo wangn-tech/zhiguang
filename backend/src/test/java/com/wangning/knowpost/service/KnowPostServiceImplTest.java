@@ -13,6 +13,9 @@ import com.wangning.knowpost.event.KnowPostPublishedEvent;
 import com.wangning.knowpost.event.KnowPostChangedEvent;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostServiceImpl;
+import com.wangning.relation.outbox.OutboxMapper;
+import com.wangning.relation.outbox.OutboxRecord;
+import com.wangning.search.event.KnowPostIndexEvent;
 import com.wangning.storage.ObjectStorageService;
 import com.wangning.user.domain.User;
 import com.wangning.user.service.UserService;
@@ -64,6 +67,9 @@ class KnowPostServiceImplTest {
     @Mock
     private KnowPostDetailCacheService knowPostDetailCacheService;
 
+    @Mock
+    private OutboxMapper outboxMapper;
+
     private KnowPostService knowPostService;
 
     @BeforeEach
@@ -76,10 +82,12 @@ class KnowPostServiceImplTest {
                 objectStorageServiceProvider,
                 counterService,
                 applicationEventPublisher,
-                knowPostDetailCacheService
+                knowPostDetailCacheService,
+                outboxMapper
         );
         lenient().when(userService.findById(1L)).thenReturn(Optional.of(User.builder().id(1L).build()));
         lenient().when(knowPostDetailCacheService.find(anyLong())).thenReturn(Optional.empty());
+        lenient().when(outboxMapper.insert(any(OutboxRecord.class))).thenReturn(1);
     }
 
     @Test
@@ -188,7 +196,7 @@ class KnowPostServiceImplTest {
     }
 
     @Test
-    void shouldPublishOwnedPostAndTranslateMissingPost() {
+    void shouldPublishOwnedPostAndTranslateMissingPost() throws Exception {
         when(knowPostMapper.publish(100L, 1L)).thenReturn(1, 0);
 
         knowPostService.publish(1L, 100L);
@@ -197,6 +205,14 @@ class KnowPostServiceImplTest {
         verify(knowPostMapper, times(2)).publish(100L, 1L);
         verify(applicationEventPublisher).publishEvent(new KnowPostPublishedEvent(1L));
         verify(applicationEventPublisher).publishEvent(new KnowPostChangedEvent(100L, 1L));
+        ArgumentCaptor<OutboxRecord> outboxCaptor = ArgumentCaptor.forClass(OutboxRecord.class);
+        verify(outboxMapper).insert(outboxCaptor.capture());
+        OutboxRecord outboxRecord = outboxCaptor.getValue();
+        assertThat(outboxRecord.getAggregateType()).isEqualTo("knowpost");
+        assertThat(outboxRecord.getAggregateId()).isEqualTo(100L);
+        assertThat(outboxRecord.getType()).isEqualTo(KnowPostIndexEvent.TYPE);
+        assertThat(new ObjectMapper().readTree(outboxRecord.getPayload()).path("knowPostId").asLong())
+                .isEqualTo(100L);
     }
 
     @Test

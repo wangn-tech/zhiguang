@@ -134,3 +134,7 @@ search:
   rebuild-on-startup: ${SEARCH_REBUILD_ON_STARTUP:false}
   rebuild-batch-size: 500
   max-body-bytes: 65536
+  events:
+    # 搜索消费者复用 relation.events 的 Canal Outbox Topic；本地默认随 RELATION_EVENTS_ENABLED 一同关闭。
+    enabled: ${SEARCH_EVENTS_ENABLED:${RELATION_EVENTS_ENABLED:false}}
+    consumer-group: search-indexer

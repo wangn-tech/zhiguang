@@ -2,9 +2,12 @@ package com.wangning.search.config;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
+
+import jakarta.validation.Valid;
 
 /**
  * Elasticsearch 搜索模块配置，对应 {@code search.*}。
@@ -41,4 +44,23 @@ public class SearchProperties {
     /** 单篇正文建立索引时最多读取的字节数。 */
     @Min(1)
     private int maxBodyBytes = 65_536;
+
+    /** 搜索索引消费者配置。 */
+    @Valid
+    @NotNull
+    private Events events = new Events();
+
+    /**
+     * 搜索索引 Kafka 消费配置。
+     */
+    @Data
+    public static class Events {
+
+        /** 是否启用搜索索引 Outbox 消费者。 */
+        private boolean enabled;
+
+        /** 搜索索引消费者组，独立于关系模块消费者组。 */
+        @NotBlank
+        private String consumerGroup = "search-indexer";
+    }
 }
