@@ -128,6 +128,31 @@ class KnowPostMapperTest {
         assertThat(knowPostMapper.findById(8_021L).getStatus()).isEqualTo("deleted");
     }
 
+    @Test
+    void shouldSearchPublicFallbackByKeywordTagsAndKeysetCursor() {
+        insertPublishedPost(8_031L, authorId, "Java 置顶", "public", true, "2026-08-24 10:00:00");
+        insertPublishedPost(8_032L, otherAuthorId, "Java 普通", "public", false, "2026-08-24 11:00:00");
+        insertPublishedPost(8_033L, authorId, "Python 内容", "public", false, "2026-08-24 12:00:00");
+        insertPublishedPost(8_034L, authorId, "Java 私密", "private", false, "2026-08-24 13:00:00");
+
+        List<KnowPostFeedRow> firstPage = knowPostMapper.searchPublicFallback(
+                "Java", "[\"Java\"]", null, null, null, 20
+        );
+        List<KnowPostFeedRow> afterTop = knowPostMapper.searchPublicFallback(
+                "Java",
+                "[\"Java\"]",
+                firstPage.getFirst().getIsTop(),
+                firstPage.getFirst().getPublishTime(),
+                firstPage.getFirst().getId(),
+                20
+        );
+
+        assertThat(firstPage).extracting(KnowPostFeedRow::getId).containsExactly(8_031L, 8_032L);
+        assertThat(afterTop).extracting(KnowPostFeedRow::getId).containsExactly(8_032L);
+        assertThat(knowPostMapper.listPublicTitleSuggestionsFallback("Java", 10))
+                .containsExactly("Java 普通", "Java 置顶");
+    }
+
     private long insertUser(String nickname) {
         jdbcTemplate.update("""
                 INSERT INTO users (nickname, avatar, tags_json)

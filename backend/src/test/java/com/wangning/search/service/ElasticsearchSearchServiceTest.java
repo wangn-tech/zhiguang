@@ -40,6 +40,9 @@ class ElasticsearchSearchServiceTest {
     @Mock
     private CounterService counterService;
 
+    @Mock
+    private MysqlSearchFallbackService mysqlSearchFallbackService;
+
     @Test
     void shouldReturnFrontEndCompatibleItemsAndCursor() throws Exception {
         SearchResponse<KnowPostSearchDocument> esResponse = mock(SearchResponse.class);
@@ -78,15 +81,28 @@ class ElasticsearchSearchServiceTest {
     }
 
     @Test
-    void shouldExposeElasticsearchFailureAsServiceUnavailable() throws Exception {
+    void shouldFallBackToMysqlWhenElasticsearchIsUnavailable() throws Exception {
         when(elasticsearchClient.search(anySearchRequest(), eq(KnowPostSearchDocument.class)))
                 .thenThrow(new IOException("offline"));
+        var fallbackResponse = new com.wangning.search.api.dto.SearchResponse(List.of(), null, false);
+        when(mysqlSearchFallbackService.search("Java", 20, null, null, null)).thenReturn(fallbackResponse);
         ElasticsearchSearchService service = service();
 
-        assertThatThrownBy(() -> service.search("Java", 20, null, null, null))
-                .isInstanceOf(BusinessException.class)
-                .extracting(exception -> ((BusinessException) exception).getErrorCode())
-                .isEqualTo(ErrorCode.SEARCH_UNAVAILABLE);
+        assertThat(service.search("Java", 20, null, null, null)).isSameAs(fallbackResponse);
+        verify(mysqlSearchFallbackService).search("Java", 20, null, null, null);
+    }
+
+    @Test
+    void shouldKeepMysqlPaginationOnFallbackWhenElasticsearchRecovers() {
+        SearchCursorCodec codec = new SearchCursorCodec(new ObjectMapper());
+        String mysqlCursor = codec.encodeMysql(false, 1_724_457_600_000L, 100L);
+        var fallbackResponse = new com.wangning.search.api.dto.SearchResponse(List.of(), null, false);
+        when(mysqlSearchFallbackService.search("Java", 20, null, mysqlCursor, null)).thenReturn(fallbackResponse);
+        ElasticsearchSearchService service = service();
+
+        assertThat(service.search("Java", 20, null, mysqlCursor, null)).isSameAs(fallbackResponse);
+
+        verify(mysqlSearchFallbackService).search("Java", 20, null, mysqlCursor, null);
     }
 
     private Function anySearchRequest() {
@@ -98,7 +114,8 @@ class ElasticsearchSearchServiceTest {
                 elasticsearchClient,
                 new SearchProperties(),
                 counterService,
-                new ObjectMapper()
+                mysqlSearchFallbackService,
+                new SearchCursorCodec(new ObjectMapper())
         );
     }
 

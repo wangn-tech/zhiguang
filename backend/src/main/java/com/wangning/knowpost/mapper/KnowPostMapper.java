@@ -6,6 +6,7 @@ import com.wangning.knowpost.domain.KnowPostFeedRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -100,6 +101,41 @@ public interface KnowPostMapper {
      * @return Feed 查询结果
      */
     List<KnowPostFeedRow> listFeedPublic(@Param("limit") int limit, @Param("offset") int offset);
+
+    /**
+     * 在 Elasticsearch 暂不可用时，按标题和摘要查询公开知文。
+     *
+     * <p>该查询不读取 OSS 正文，只作为搜索服务的有限降级能力。分页采用置顶、发布时间和 ID 组成的
+     * keyset 游标，避免高页码 OFFSET 扫描。</p>
+     *
+     * @param keyword 标题或摘要关键词
+     * @param tagsJson 可选 JSON 标签数组；为空时不按标签过滤
+     * @param cursorIsTop 上一页最后一项的置顶状态；首次查询时为 {@code null}
+     * @param cursorPublishTime 上一页最后一项的发布时间；首次查询时为 {@code null}
+     * @param cursorId 上一页最后一项的知文 ID；首次查询时为 {@code null}
+     * @param limit 最大查询数量
+     * @return 按 MySQL 降级排序返回的公开知文
+     */
+    List<KnowPostFeedRow> searchPublicFallback(
+            @Param("keyword") String keyword,
+            @Param("tagsJson") String tagsJson,
+            @Param("cursorIsTop") Boolean cursorIsTop,
+            @Param("cursorPublishTime") Instant cursorPublishTime,
+            @Param("cursorId") Long cursorId,
+            @Param("limit") int limit
+    );
+
+    /**
+     * 在 Elasticsearch 暂不可用时查询标题前缀联想。
+     *
+     * @param prefix 标题前缀
+     * @param limit 最大候选数
+     * @return 公开已发布知文的标题列表
+     */
+    List<String> listPublicTitleSuggestionsFallback(
+            @Param("prefix") String prefix,
+            @Param("limit") int limit
+    );
 
     /**
      * 分页查询指定作者已发布的知文。

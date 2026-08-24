@@ -8,8 +8,6 @@ import co.elastic.clients.elasticsearch.core.search.HighlightField;
 import co.elastic.clients.elasticsearch.core.search.Hit;
 import co.elastic.clients.elasticsearch.core.search.Suggestion;
 import co.elastic.clients.util.NamedValue;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
@@ -24,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -48,15 +45,20 @@ public class ElasticsearchSearchService implements SearchService {
     private final ElasticsearchClient elasticsearchClient;
     private final SearchProperties properties;
     private final CounterService counterService;
-    private final ObjectMapper objectMapper;
+    private final MysqlSearchFallbackService mysqlSearchFallbackService;
+    private final SearchCursorCodec cursorCodec;
 
     /**
      * {@inheritDoc}
      */
     @Override
     public SearchResponse search(String keyword, int size, String tagsCsv, String after, Long currentUserId) {
+        String cursorSource = cursorCodec.sourceOf(after);
+        if (SearchCursorCodec.MYSQL_SOURCE.equals(cursorSource)) {
+            return mysqlSearchFallbackService.search(keyword, size, tagsCsv, after, currentUserId);
+        }
         List<String> tags = parseTags(tagsCsv);
-        SearchAfterCursor cursor = decodeCursor(after);
+        SearchCursorCodec.EsCursor cursor = cursorSource == null ? null : cursorCodec.decodeEs(after);
         List<SortOptions> sorts = searchSorts();
 
         co.elastic.clients.elasticsearch.core.SearchResponse<KnowPostSearchDocument> response;
@@ -88,12 +90,19 @@ public class ElasticsearchSearchService implements SearchService {
                         )
                         .sort(sorts);
                 if (cursor != null) {
-                    request.searchAfter(cursor.toFieldValues());
+                    request.searchAfter(List.of(
+                            FieldValue.of(cursor.score()),
+                            FieldValue.of(cursor.publishTime()),
+                            FieldValue.of(cursor.id())
+                    ));
                 }
                 return request;
             }, KnowPostSearchDocument.class);
         } catch (IOException | RuntimeException exception) {
-            throw unavailable(exception);
+            if (cursor != null) {
+                throw unavailable();
+            }
+            return mysqlSearchFallbackService.search(keyword, size, tagsCsv, null, currentUserId);
         }
 
         List<Hit<KnowPostSearchDocument>> hits = response.hits() == null || response.hits().hits() == null
@@ -124,7 +133,7 @@ public class ElasticsearchSearchService implements SearchService {
             );
             return new SuggestResponse(extractSuggestions(response));
         } catch (IOException | RuntimeException exception) {
-            throw unavailable(exception);
+            return mysqlSearchFallbackService.suggest(prefix, size);
         }
     }
 
@@ -186,39 +195,11 @@ public class ElasticsearchSearchService implements SearchService {
         if (sortValues == null || sortValues.size() != 3) {
             throw new IllegalStateException("搜索索引未返回完整排序值");
         }
-        SearchAfterCursor cursor = new SearchAfterCursor(
+        return cursorCodec.encodeEs(
                 fieldValueAsDouble(sortValues.get(0)),
                 fieldValueAsLong(sortValues.get(1)),
                 fieldValueAsLong(sortValues.get(2))
         );
-        try {
-            byte[] json = objectMapper.writeValueAsBytes(cursor);
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(json);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("搜索游标序列化失败", exception);
-        }
-    }
-
-    /**
-     * 解码并校验客户端提供的翻页游标。
-     *
-     * @param encodedCursor Base64URL 编码游标，可为空
-     * @return 游标；首次查询时为 {@code null}
-     */
-    private SearchAfterCursor decodeCursor(String encodedCursor) {
-        if (!StringUtils.hasText(encodedCursor)) {
-            return null;
-        }
-        try {
-            byte[] json = Base64.getUrlDecoder().decode(encodedCursor);
-            SearchAfterCursor cursor = objectMapper.readValue(json, SearchAfterCursor.class);
-            if (!Double.isFinite(cursor.score()) || cursor.publishTime() < 0 || cursor.id() <= 0) {
-                throw new IllegalArgumentException("invalid cursor fields");
-            }
-            return cursor;
-        } catch (IllegalArgumentException | IOException exception) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "搜索游标无效");
-        }
     }
 
     /**
@@ -316,21 +297,7 @@ public class ElasticsearchSearchService implements SearchService {
         throw new IllegalStateException("搜索排序字段类型异常");
     }
 
-    private BusinessException unavailable(Exception exception) {
+    private BusinessException unavailable() {
         return new BusinessException(ErrorCode.SEARCH_UNAVAILABLE, "搜索服务暂时不可用");
-    }
-
-    /**
-     * Base64URL JSON 游标的稳定载荷。
-     *
-     * @param score 最后命中的相关性分数
-     * @param publishTime 最后命中的发布时间毫秒值
-     * @param id 最后命中的知文 ID
-     */
-    private record SearchAfterCursor(double score, long publishTime, long id) {
-
-        private List<FieldValue> toFieldValues() {
-            return List.of(FieldValue.of(score), FieldValue.of(publishTime), FieldValue.of(id));
-        }
     }
 }
