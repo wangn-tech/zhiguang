@@ -81,8 +81,8 @@ storage:
 
 knowpost:
   snowflake:
-    datacenter-id: ${SNOWFLAKE_DATACENTER_ID}
-    worker-id: ${SNOWFLAKE_WORKER_ID}
+    datacenter-id: ${SNOWFLAKE_DATACENTER_ID:0}
+    worker-id: ${SNOWFLAKE_WORKER_ID:0}
 
 relation:
   events:
