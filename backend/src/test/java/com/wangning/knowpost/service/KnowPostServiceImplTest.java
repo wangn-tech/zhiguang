@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
+import com.wangning.cache.service.KnowPostDetailCacheService;
+import com.wangning.cache.model.KnowPostDetailSnapshot;
 import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
 import com.wangning.knowpost.event.KnowPostPublishedEvent;
+import com.wangning.knowpost.event.KnowPostChangedEvent;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostServiceImpl;
 import com.wangning.storage.ObjectStorageService;
@@ -58,6 +61,9 @@ class KnowPostServiceImplTest {
     @Mock
     private ApplicationEventPublisher applicationEventPublisher;
 
+    @Mock
+    private KnowPostDetailCacheService knowPostDetailCacheService;
+
     private KnowPostService knowPostService;
 
     @BeforeEach
@@ -69,9 +75,11 @@ class KnowPostServiceImplTest {
                 userService,
                 objectStorageServiceProvider,
                 counterService,
-                applicationEventPublisher
+                applicationEventPublisher,
+                knowPostDetailCacheService
         );
         lenient().when(userService.findById(1L)).thenReturn(Optional.of(User.builder().id(1L).build()));
+        lenient().when(knowPostDetailCacheService.find(anyLong())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -188,6 +196,7 @@ class KnowPostServiceImplTest {
 
         verify(knowPostMapper, times(2)).publish(100L, 1L);
         verify(applicationEventPublisher).publishEvent(new KnowPostPublishedEvent(1L));
+        verify(applicationEventPublisher).publishEvent(new KnowPostChangedEvent(100L, 1L));
     }
 
     @Test
@@ -235,6 +244,29 @@ class KnowPostServiceImplTest {
         assertThat(ownerDetail.visible()).isEqualTo("private");
         assertThat(ownerDetail.liked()).isTrue();
         assertThat(ownerDetail.faved()).isTrue();
+    }
+
+    @Test
+    void shouldUsePublicSnapshotAndStillReadCurrentUserInteractionState() {
+        KnowPostDetailSnapshot snapshot = new KnowPostDetailSnapshot(
+                "100", "缓存标题", "缓存摘要", "https://static.example.com/posts/100/content.md",
+                List.of(), List.of("Java"), "1", null, "作者", null,
+                false, "public", "image_text", null
+        );
+        when(knowPostDetailCacheService.find(100L)).thenReturn(Optional.of(snapshot));
+        when(counterService.getCounts("knowpost", "100", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 9L, "fav", 4L));
+        when(counterService.isLiked("knowpost", "100", 2L)).thenReturn(true);
+        when(counterService.isFaved("knowpost", "100", 2L)).thenReturn(false);
+
+        var detail = knowPostService.getDetail(100L, 2L);
+
+        assertThat(detail.title()).isEqualTo("缓存标题");
+        assertThat(detail.likeCount()).isEqualTo(9L);
+        assertThat(detail.favoriteCount()).isEqualTo(4L);
+        assertThat(detail.liked()).isTrue();
+        assertThat(detail.faved()).isFalse();
+        verify(knowPostMapper, never()).findDetailById(100L);
     }
 
     @Test

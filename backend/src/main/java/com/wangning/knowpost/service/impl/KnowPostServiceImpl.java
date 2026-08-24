@@ -3,6 +3,8 @@ package com.wangning.knowpost.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wangning.cache.model.KnowPostDetailSnapshot;
+import com.wangning.cache.service.KnowPostDetailCacheService;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
@@ -11,6 +13,7 @@ import com.wangning.knowpost.domain.KnowPost;
 import com.wangning.knowpost.domain.KnowPostDetailRow;
 import com.wangning.knowpost.domain.SnowflakeIdGenerator;
 import com.wangning.knowpost.event.KnowPostPublishedEvent;
+import com.wangning.knowpost.event.KnowPostChangedEvent;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.KnowPostService;
 import com.wangning.storage.ObjectStorageService;
@@ -54,6 +57,7 @@ public class KnowPostServiceImpl implements KnowPostService {
     private final ObjectProvider<ObjectStorageService> objectStorageServiceProvider;
     private final CounterService counterService;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final KnowPostDetailCacheService knowPostDetailCacheService;
 
     /**
      * {@inheritDoc}
@@ -122,6 +126,7 @@ public class KnowPostServiceImpl implements KnowPostService {
                 .build();
 
         ensureSingleRow(knowPostMapper.updateContent(content), "草稿不存在或无权限");
+        publishChangedEvent(id, creatorId);
     }
 
     /**
@@ -161,6 +166,7 @@ public class KnowPostServiceImpl implements KnowPostService {
                 .build();
 
         ensureSingleRow(knowPostMapper.updateMetadata(metadata), "草稿不存在或无权限");
+        publishChangedEvent(id, creatorId);
     }
 
     /**
@@ -173,6 +179,7 @@ public class KnowPostServiceImpl implements KnowPostService {
         validatePostId(id);
         ensureSingleRow(knowPostMapper.publish(id, creatorId), "草稿不存在或无权限");
         applicationEventPublisher.publishEvent(new KnowPostPublishedEvent(creatorId));
+        publishChangedEvent(id, creatorId);
     }
 
     /**
@@ -184,6 +191,7 @@ public class KnowPostServiceImpl implements KnowPostService {
         validateCreator(creatorId);
         validatePostId(id);
         ensureSingleRow(knowPostMapper.updateTop(id, creatorId, isTop), "草稿不存在或无权限");
+        publishChangedEvent(id, creatorId);
     }
 
     /**
@@ -198,6 +206,7 @@ public class KnowPostServiceImpl implements KnowPostService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "可见性取值非法");
         }
         ensureSingleRow(knowPostMapper.updateVisibility(id, creatorId, visible), "草稿不存在或无权限");
+        publishChangedEvent(id, creatorId);
     }
 
     /**
@@ -209,6 +218,7 @@ public class KnowPostServiceImpl implements KnowPostService {
         validateCreator(creatorId);
         validatePostId(id);
         ensureSingleRow(knowPostMapper.softDelete(id, creatorId), "草稿不存在或无权限");
+        publishChangedEvent(id, creatorId);
     }
 
     /**
@@ -218,6 +228,11 @@ public class KnowPostServiceImpl implements KnowPostService {
     @Transactional(readOnly = true)
     public KnowPostDetailResponse getDetail(long id, Long currentUserId) {
         validatePostId(id);
+        var cachedSnapshot = knowPostDetailCacheService.find(id);
+        if (cachedSnapshot.isPresent()) {
+            return enrichDetail(cachedSnapshot.get(), currentUserId);
+        }
+
         KnowPostDetailRow row = knowPostMapper.findDetailById(id);
         if (row == null || "deleted".equals(row.getStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "内容不存在");
@@ -229,12 +244,42 @@ public class KnowPostServiceImpl implements KnowPostService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "无权限查看");
         }
 
-        String entityId = String.valueOf(row.getId());
+        KnowPostDetailSnapshot snapshot = toSnapshot(row);
+        if (isPublic) {
+            knowPostDetailCacheService.put(snapshot);
+        }
+        return enrichDetail(snapshot, currentUserId);
+    }
+
+    /**
+     * 将可共享的详情快照补齐为当前访问者的接口响应。
+     *
+     * @param snapshot 已经完成权限过滤的公开或作者详情快照
+     * @param currentUserId 当前登录用户 ID；匿名访问时为 {@code null}
+     * @return 包含实时互动信息的详情响应
+     */
+    private KnowPostDetailResponse enrichDetail(KnowPostDetailSnapshot snapshot, Long currentUserId) {
+        String entityId = snapshot.id();
         Map<String, Long> counts = counterService.getCounts(KNOWPOST, entityId, COUNTER_METRICS);
         boolean liked = currentUserId != null && counterService.isLiked(KNOWPOST, entityId, currentUserId);
         boolean faved = currentUserId != null && counterService.isFaved(KNOWPOST, entityId, currentUserId);
-        return new KnowPostDetailResponse(
-                entityId,
+        return snapshot.toResponse(
+                counts.getOrDefault("like", 0L),
+                counts.getOrDefault("fav", 0L),
+                liked,
+                faved
+        );
+    }
+
+    /**
+     * 将数据库详情行转换为不含互动信息的缓存快照。
+     *
+     * @param row 已通过可见性检查的详情行
+     * @return 可供缓存和接口组装使用的稳定快照
+     */
+    private KnowPostDetailSnapshot toSnapshot(KnowPostDetailRow row) {
+        return new KnowPostDetailSnapshot(
+                String.valueOf(row.getId()),
                 row.getTitle(),
                 row.getDescription(),
                 row.getContentUrl(),
@@ -244,15 +289,21 @@ public class KnowPostServiceImpl implements KnowPostService {
                 row.getAuthorAvatar(),
                 row.getAuthorNickname(),
                 row.getAuthorTagJson(),
-                counts.getOrDefault("like", 0L),
-                counts.getOrDefault("fav", 0L),
-                liked,
-                faved,
                 row.getIsTop(),
                 row.getVisible(),
                 row.getType(),
                 row.getPublishTime()
         );
+    }
+
+    /**
+     * 发布知文数据变更事件，由事务提交后的监听器失效缓存。
+     *
+     * @param id 知文 ID
+     * @param creatorId 作者用户 ID
+     */
+    private void publishChangedEvent(long id, long creatorId) {
+        applicationEventPublisher.publishEvent(new KnowPostChangedEvent(id, creatorId));
     }
 
     /**
