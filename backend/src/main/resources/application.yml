@@ -111,3 +111,16 @@ counter:
     dedup-ttl: P7D
     flush-interval: PT1S
     flush-batch-size: 100
+
+cache:
+  l1:
+    detail-ttl: PT30S
+    detail-max-size: 5000
+    public-feed-ttl: PT15S
+    public-feed-max-size: 1000
+    mine-feed-ttl: PT10S
+    mine-feed-max-size: 1000
+  l2:
+    detail-ttl: PT10M
+    public-feed-ttl: PT2M
+    mine-feed-ttl: PT1M

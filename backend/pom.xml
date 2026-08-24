@@ -82,6 +82,12 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- Caffeine：应用进程内的一级知文缓存 -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+
         <!-- Redisson：分布式锁、限流等高级 Redis 能力封装 -->
         <dependency>
             <groupId>org.redisson</groupId>
