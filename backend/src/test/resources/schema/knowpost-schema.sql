@@ -1,0 +1,43 @@
+CREATE TABLE users (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    phone VARCHAR(32) NULL,
+    email VARCHAR(128) NULL,
+    password_hash VARCHAR(128) NULL,
+    nickname VARCHAR(64) NOT NULL,
+    avatar TEXT NULL,
+    bio VARCHAR(512) NULL,
+    zg_id VARCHAR(64) NULL,
+    gender VARCHAR(16) NULL,
+    birthday DATE NULL,
+    school VARCHAR(128) NULL,
+    tags_json JSON NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE know_posts (
+    id BIGINT UNSIGNED NOT NULL,
+    tag_id BIGINT UNSIGNED NULL,
+    tags JSON NULL,
+    title VARCHAR(256) NULL,
+    description VARCHAR(50) NULL,
+    content_url TEXT NULL,
+    content_object_key VARCHAR(512) NULL,
+    content_etag VARCHAR(128) NULL,
+    content_size BIGINT UNSIGNED NULL,
+    content_sha256 CHAR(64) NULL,
+    creator_id BIGINT UNSIGNED NOT NULL,
+    is_top TINYINT(1) NOT NULL DEFAULT 0,
+    type VARCHAR(32) NOT NULL DEFAULT 'image_text',
+    visible VARCHAR(32) NOT NULL DEFAULT 'public',
+    img_urls JSON NULL,
+    video_url TEXT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'draft',
+    create_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    publish_time TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id),
+    KEY ix_know_posts_creator_status_pub (creator_id, status, publish_time),
+    CONSTRAINT fk_know_posts_creator FOREIGN KEY (creator_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

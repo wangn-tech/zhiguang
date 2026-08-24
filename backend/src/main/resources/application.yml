@@ -62,3 +62,8 @@ storage:
     public-base-url: ${OSS_PUBLIC_BASE_URL:}
     avatar-max-size: 5MB
     presign-ttl: PT10M
+
+knowpost:
+  snowflake:
+    datacenter-id: ${SNOWFLAKE_DATACENTER_ID}
+    worker-id: ${SNOWFLAKE_WORKER_ID}
