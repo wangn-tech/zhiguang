@@ -74,6 +74,11 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/knowposts/feed",
+                                "/api/v1/knowposts/detail/*"
+                        ).permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth -> oauth
                         .jwt(jwt -> jwt.decoder(accessJwtDecoder))
