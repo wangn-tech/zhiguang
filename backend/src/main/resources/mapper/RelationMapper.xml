@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wangning.relation.mapper.RelationMapper">
+
+    <resultMap id="UserRelationResultMap" type="com.wangning.relation.domain.UserRelation">
+        <id column="id" property="id"/>
+        <result column="from_user_id" property="fromUserId"/>
+        <result column="to_user_id" property="toUserId"/>
+        <result column="rel_status" property="active"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <insert id="upsertFollowing" parameterType="com.wangning.relation.domain.UserRelation">
+        INSERT INTO following (
+            id, from_user_id, to_user_id, rel_status, created_at, updated_at
+        ) VALUES (
+            #{id}, #{fromUserId}, #{toUserId}, 1, #{createdAt}, #{updatedAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            rel_status = 1,
+            created_at = VALUES(created_at),
+            updated_at = VALUES(updated_at)
+    </insert>
+
+    <update id="deactivateFollowing">
+        UPDATE following
+        SET rel_status = 0,
+            updated_at = #{updatedAt}
+        WHERE from_user_id = #{fromUserId}
+          AND to_user_id = #{toUserId}
+          AND rel_status = 1
+    </update>
+
+    <insert id="upsertFollower" parameterType="com.wangning.relation.domain.UserRelation">
+        INSERT INTO follower (
+            id, to_user_id, from_user_id, rel_status, created_at, updated_at
+        ) VALUES (
+            #{id}, #{toUserId}, #{fromUserId}, 1, #{createdAt}, #{updatedAt}
+        )
+        ON DUPLICATE KEY UPDATE
+            rel_status = 1,
+            created_at = VALUES(created_at),
+            updated_at = VALUES(updated_at)
+    </insert>
+
+    <update id="deactivateFollower">
+        UPDATE follower
+        SET rel_status = 0,
+            updated_at = #{updatedAt}
+        WHERE to_user_id = #{toUserId}
+          AND from_user_id = #{fromUserId}
+          AND rel_status = 1
+    </update>
+
+    <select id="findFollowing" resultMap="UserRelationResultMap">
+        SELECT id, from_user_id, to_user_id, rel_status, created_at, updated_at
+        FROM following
+        WHERE from_user_id = #{fromUserId}
+          AND to_user_id = #{toUserId}
+    </select>
+
+    <select id="findFollower" resultMap="UserRelationResultMap">
+        SELECT id, from_user_id, to_user_id, rel_status, created_at, updated_at
+        FROM follower
+        WHERE to_user_id = #{toUserId}
+          AND from_user_id = #{fromUserId}
+    </select>
+
+    <select id="existsFollowing" resultType="boolean">
+        SELECT EXISTS(
+            SELECT 1
+            FROM following
+            WHERE from_user_id = #{fromUserId}
+              AND to_user_id = #{toUserId}
+              AND rel_status = 1
+        )
+    </select>
+
+    <select id="listFollowings" resultType="com.wangning.relation.domain.RelationListItem">
+        SELECT to_user_id AS userId, created_at AS createdAt
+        FROM following
+        WHERE from_user_id = #{fromUserId}
+          AND rel_status = 1
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="listFollowers" resultType="com.wangning.relation.domain.RelationListItem">
+        SELECT from_user_id AS userId, created_at AS createdAt
+        FROM follower
+        WHERE to_user_id = #{toUserId}
+          AND rel_status = 1
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="listFollowingsBefore" resultType="com.wangning.relation.domain.RelationListItem">
+        SELECT to_user_id AS userId, created_at AS createdAt
+        FROM following
+        WHERE from_user_id = #{fromUserId}
+          AND rel_status = 1
+          AND created_at &lt; #{cursor}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="listFollowersBefore" resultType="com.wangning.relation.domain.RelationListItem">
+        SELECT from_user_id AS userId, created_at AS createdAt
+        FROM follower
+        WHERE to_user_id = #{toUserId}
+          AND rel_status = 1
+          AND created_at &lt; #{cursor}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="countFollowings" resultType="long">
+        SELECT COUNT(*)
+        FROM following
+        WHERE from_user_id = #{fromUserId}
+          AND rel_status = 1
+    </select>
+
+    <select id="countFollowers" resultType="long">
+        SELECT COUNT(*)
+        FROM follower
+        WHERE to_user_id = #{toUserId}
+          AND rel_status = 1
+    </select>
+</mapper>
