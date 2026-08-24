@@ -3,6 +3,9 @@ package com.wangning.knowpost.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wangning.cache.model.FeedItemSnapshot;
+import com.wangning.cache.model.FeedPageSnapshot;
+import com.wangning.cache.service.KnowPostFeedCacheService;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
@@ -35,6 +38,7 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
     private final KnowPostMapper knowPostMapper;
     private final ObjectMapper objectMapper;
     private final CounterService counterService;
+    private final KnowPostFeedCacheService knowPostFeedCacheService;
 
     /**
      * {@inheritDoc}
@@ -43,11 +47,18 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
     @Transactional(readOnly = true)
     public FeedPageResponse getPublicFeed(int page, int size, Long currentUserId) {
         PageRequest pageRequest = normalizePage(page, size);
+        var cached = knowPostFeedCacheService.findPublic(pageRequest.page(), pageRequest.size());
+        if (cached.isPresent()) {
+            return enrichPage(cached.get(), currentUserId);
+        }
+
         List<KnowPostFeedRow> rows = knowPostMapper.listFeedPublic(
                 pageRequest.size() + 1,
                 pageRequest.offset()
         );
-        return toPageResponse(rows, pageRequest, currentUserId);
+        FeedPageSnapshot snapshot = toSnapshot(rows, pageRequest);
+        knowPostFeedCacheService.putPublic(snapshot);
+        return enrichPage(snapshot, currentUserId);
     }
 
     /**
@@ -60,12 +71,19 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
             throw new BusinessException(ErrorCode.UNAUTHORIZED);
         }
         PageRequest pageRequest = normalizePage(page, size);
+        var cached = knowPostFeedCacheService.findMine(creatorId, pageRequest.page(), pageRequest.size());
+        if (cached.isPresent()) {
+            return enrichPage(cached.get(), creatorId);
+        }
+
         List<KnowPostFeedRow> rows = knowPostMapper.listMyPublished(
                 creatorId,
                 pageRequest.size() + 1,
                 pageRequest.offset()
         );
-        return toPageResponse(rows, pageRequest, creatorId);
+        FeedPageSnapshot snapshot = toSnapshot(rows, pageRequest);
+        knowPostFeedCacheService.putMine(creatorId, snapshot);
+        return enrichPage(snapshot, creatorId);
     }
 
     /**
@@ -88,20 +106,19 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
      * @param pageRequest 分页参数
      * @return 分页响应
      */
-    private FeedPageResponse toPageResponse(
+    private FeedPageSnapshot toSnapshot(
             List<KnowPostFeedRow> rows,
-            PageRequest pageRequest,
-            Long currentUserId
+            PageRequest pageRequest
     ) {
         List<KnowPostFeedRow> safeRows = rows == null ? Collections.emptyList() : rows;
         boolean hasMore = safeRows.size() > pageRequest.size();
         List<KnowPostFeedRow> currentPage = hasMore
                 ? safeRows.subList(0, pageRequest.size())
                 : safeRows;
-        List<FeedItemResponse> items = currentPage.stream()
-                .map(row -> toItemResponse(row, currentUserId))
+        List<FeedItemSnapshot> items = currentPage.stream()
+                .map(this::toItemSnapshot)
                 .toList();
-        return new FeedPageResponse(items, pageRequest.page(), pageRequest.size(), hasMore);
+        return new FeedPageSnapshot(items, pageRequest.page(), pageRequest.size(), hasMore);
     }
 
     /**
@@ -110,15 +127,11 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
      * @param row Mapper 查询行
      * @return 前端兼容的 Feed 响应
      */
-    private FeedItemResponse toItemResponse(KnowPostFeedRow row, Long currentUserId) {
+    private FeedItemSnapshot toItemSnapshot(KnowPostFeedRow row) {
         List<String> images = parseStringArray(row.getImgUrls());
         String coverImage = images.isEmpty() ? null : images.getFirst();
-        String entityId = String.valueOf(row.getId());
-        Map<String, Long> counts = counterService.getCounts(KNOWPOST, entityId, COUNTER_METRICS);
-        boolean liked = currentUserId != null && counterService.isLiked(KNOWPOST, entityId, currentUserId);
-        boolean faved = currentUserId != null && counterService.isFaved(KNOWPOST, entityId, currentUserId);
-        return new FeedItemResponse(
-                entityId,
+        return new FeedItemSnapshot(
+                String.valueOf(row.getId()),
                 row.getTitle(),
                 row.getDescription(),
                 coverImage,
@@ -126,11 +139,40 @@ public class KnowPostFeedServiceImpl implements KnowPostFeedService {
                 row.getAuthorAvatar(),
                 row.getAuthorNickname(),
                 row.getAuthorTagJson(),
+                row.getIsTop()
+        );
+    }
+
+    /**
+     * 将共享 Feed 快照补齐为当前访问者的接口响应。
+     *
+     * @param snapshot 不含互动数据的 Feed 页面快照
+     * @param currentUserId 当前登录用户 ID；匿名访问时为 {@code null}
+     * @return 具有实时互动数据的 Feed 响应
+     */
+    private FeedPageResponse enrichPage(FeedPageSnapshot snapshot, Long currentUserId) {
+        List<FeedItemResponse> items = snapshot.items().stream()
+                .map(item -> enrichItem(item, currentUserId))
+                .toList();
+        return new FeedPageResponse(items, snapshot.page(), snapshot.size(), snapshot.hasMore());
+    }
+
+    /**
+     * 为单条稳定 Feed 快照补齐实时互动数据。
+     *
+     * @param snapshot 不含互动数据的 Feed 项快照
+     * @param currentUserId 当前登录用户 ID；匿名访问时为 {@code null}
+     * @return 前端兼容的 Feed 响应项
+     */
+    private FeedItemResponse enrichItem(FeedItemSnapshot snapshot, Long currentUserId) {
+        Map<String, Long> counts = counterService.getCounts(KNOWPOST, snapshot.id(), COUNTER_METRICS);
+        boolean liked = currentUserId != null && counterService.isLiked(KNOWPOST, snapshot.id(), currentUserId);
+        boolean faved = currentUserId != null && counterService.isFaved(KNOWPOST, snapshot.id(), currentUserId);
+        return snapshot.toResponse(
                 counts.getOrDefault("like", 0L),
                 counts.getOrDefault("fav", 0L),
                 liked,
-                faved,
-                row.getIsTop()
+                faved
         );
     }
 

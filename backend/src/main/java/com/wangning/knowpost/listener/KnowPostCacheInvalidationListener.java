@@ -1,6 +1,7 @@
 package com.wangning.knowpost.listener;
 
 import com.wangning.cache.service.KnowPostDetailCacheService;
+import com.wangning.cache.service.KnowPostFeedCacheService;
 import com.wangning.knowpost.event.KnowPostChangedEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 public class KnowPostCacheInvalidationListener {
 
     private final KnowPostDetailCacheService knowPostDetailCacheService;
+    private final KnowPostFeedCacheService knowPostFeedCacheService;
 
     /**
      * 删除已提交变更对应的详情快照。
@@ -26,5 +28,7 @@ public class KnowPostCacheInvalidationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onKnowPostChanged(KnowPostChangedEvent event) {
         knowPostDetailCacheService.invalidate(event.knowPostId());
+        knowPostFeedCacheService.invalidatePublic();
+        knowPostFeedCacheService.invalidateMine(event.creatorId());
     }
 }

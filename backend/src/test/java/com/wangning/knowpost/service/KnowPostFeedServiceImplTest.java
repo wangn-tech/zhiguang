@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wangning.common.exception.BusinessException;
 import com.wangning.common.exception.ErrorCode;
 import com.wangning.counter.service.CounterService;
+import com.wangning.cache.model.FeedItemSnapshot;
+import com.wangning.cache.model.FeedPageSnapshot;
+import com.wangning.cache.service.KnowPostFeedCacheService;
 import com.wangning.knowpost.domain.KnowPostFeedRow;
 import com.wangning.knowpost.mapper.KnowPostMapper;
 import com.wangning.knowpost.service.impl.KnowPostFeedServiceImpl;
@@ -15,11 +18,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class KnowPostFeedServiceImplTest {
@@ -30,11 +35,30 @@ class KnowPostFeedServiceImplTest {
     @Mock
     private CounterService counterService;
 
+    @Mock
+    private KnowPostFeedCacheService knowPostFeedCacheService;
+
     private KnowPostFeedService knowPostFeedService;
 
     @BeforeEach
     void setUp() {
-        knowPostFeedService = new KnowPostFeedServiceImpl(knowPostMapper, new ObjectMapper(), counterService);
+        knowPostFeedService = new KnowPostFeedServiceImpl(
+                knowPostMapper,
+                new ObjectMapper(),
+                counterService,
+                knowPostFeedCacheService
+        );
+        lenient().when(knowPostFeedCacheService.findPublic(
+                        org.mockito.ArgumentMatchers.anyInt(),
+                        org.mockito.ArgumentMatchers.anyInt()
+                ))
+                .thenReturn(Optional.empty());
+        lenient().when(knowPostFeedCacheService.findMine(
+                        org.mockito.ArgumentMatchers.anyLong(),
+                        org.mockito.ArgumentMatchers.anyInt(),
+                        org.mockito.ArgumentMatchers.anyInt()
+                ))
+                .thenReturn(Optional.empty());
     }
 
     @Test
@@ -96,6 +120,30 @@ class KnowPostFeedServiceImplTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.UNAUTHORIZED);
+    }
+
+    @Test
+    void shouldUseSharedPublicFeedSnapshotAndKeepInteractionStatePerUser() {
+        FeedPageSnapshot snapshot = new FeedPageSnapshot(
+                List.of(new FeedItemSnapshot(
+                        "100", "缓存标题", "缓存摘要", null, List.of("Java"),
+                        null, "作者", "[]", false
+                )),
+                1,
+                20,
+                false
+        );
+        when(knowPostFeedCacheService.findPublic(1, 20)).thenReturn(Optional.of(snapshot));
+        when(counterService.getCounts("knowpost", "100", List.of("like", "fav")))
+                .thenReturn(Map.of("like", 7L, "fav", 3L));
+        when(counterService.isLiked("knowpost", "100", 2L)).thenReturn(true);
+
+        var response = knowPostFeedService.getPublicFeed(1, 20, 2L);
+
+        assertThat(response.items().getFirst().title()).isEqualTo("缓存标题");
+        assertThat(response.items().getFirst().likeCount()).isEqualTo(7L);
+        assertThat(response.items().getFirst().liked()).isTrue();
+        verify(knowPostMapper, org.mockito.Mockito.never()).listFeedPublic(org.mockito.ArgumentMatchers.anyInt(), org.mockito.ArgumentMatchers.anyInt());
     }
 
     private KnowPostFeedRow row(long id, String title) {
