@@ -29,3 +29,13 @@ CREATE TABLE follower (
     KEY idx_to_created (to_user_id, created_at, from_user_id, rel_status),
     KEY idx_from (from_user_id, to_user_id, rel_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE outbox (
+    id BIGINT UNSIGNED NOT NULL,
+    aggregate_type VARCHAR(64) NOT NULL,
+    aggregate_id BIGINT UNSIGNED NULL,
+    type VARCHAR(64) NOT NULL,
+    payload JSON NOT NULL,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

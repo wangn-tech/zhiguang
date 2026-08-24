@@ -2,6 +2,8 @@ package com.wangning.relation.mapper;
 
 import com.wangning.relation.domain.RelationListItem;
 import com.wangning.relation.domain.UserRelation;
+import com.wangning.relation.outbox.OutboxMapper;
+import com.wangning.relation.outbox.OutboxRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mybatis.spring.boot.test.autoconfigure.MybatisTest;
@@ -43,6 +45,9 @@ class RelationMapperTest {
     private RelationMapper relationMapper;
 
     @Autowired
+    private OutboxMapper outboxMapper;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     private long aliceId;
@@ -53,6 +58,7 @@ class RelationMapperTest {
     void setUp() {
         jdbcTemplate.update("DELETE FROM follower");
         jdbcTemplate.update("DELETE FROM following");
+        jdbcTemplate.update("DELETE FROM outbox");
         jdbcTemplate.update("DELETE FROM users");
         aliceId = insertUser("Alice");
         bobId = insertUser("Bob");
@@ -64,13 +70,14 @@ class RelationMapperTest {
         Instant createdAt = Instant.parse("2026-08-24T10:00:00Z");
         Instant restoredAt = Instant.parse("2026-08-24T11:00:00Z");
 
-        assertThat(relationMapper.upsertFollowing(relation(9_001L, aliceId, bobId, createdAt))).isEqualTo(1);
+        assertThat(relationMapper.insertFollowingIgnore(relation(9_001L, aliceId, bobId, createdAt))).isEqualTo(1);
         assertThat(relationMapper.existsFollowing(aliceId, bobId)).isTrue();
+        assertThat(relationMapper.insertFollowingIgnore(relation(9_002L, aliceId, bobId, restoredAt))).isZero();
         assertThat(relationMapper.deactivateFollowing(aliceId, bobId, createdAt.plusSeconds(60))).isEqualTo(1);
         assertThat(relationMapper.deactivateFollowing(aliceId, bobId, createdAt.plusSeconds(61))).isZero();
         assertThat(relationMapper.existsFollowing(aliceId, bobId)).isFalse();
 
-        assertThat(relationMapper.upsertFollowing(relation(9_002L, aliceId, bobId, restoredAt))).isGreaterThan(0);
+        assertThat(relationMapper.reactivateFollowing(aliceId, bobId, restoredAt, restoredAt)).isEqualTo(1);
 
         UserRelation stored = relationMapper.findFollowing(aliceId, bobId);
         assertThat(stored.getId()).isEqualTo(9_001L);
@@ -96,9 +103,9 @@ class RelationMapperTest {
         Instant ten = Instant.parse("2026-08-24T10:00:00Z");
         Instant eleven = Instant.parse("2026-08-24T11:00:00Z");
         Instant noon = Instant.parse("2026-08-24T12:00:00Z");
-        relationMapper.upsertFollowing(relation(9_021L, aliceId, bobId, ten));
-        relationMapper.upsertFollowing(relation(9_022L, aliceId, carolId, eleven));
-        relationMapper.upsertFollowing(relation(9_023L, bobId, aliceId, noon));
+        relationMapper.insertFollowingIgnore(relation(9_021L, aliceId, bobId, ten));
+        relationMapper.insertFollowingIgnore(relation(9_022L, aliceId, carolId, eleven));
+        relationMapper.insertFollowingIgnore(relation(9_023L, bobId, aliceId, noon));
         relationMapper.upsertFollower(relation(9_024L, bobId, aliceId, ten));
         relationMapper.upsertFollower(relation(9_025L, carolId, aliceId, eleven));
         relationMapper.deactivateFollowing(aliceId, bobId, noon.plusSeconds(1));
@@ -115,6 +122,26 @@ class RelationMapperTest {
                 .containsExactly(carolId);
         assertThat(relationMapper.countFollowings(aliceId)).isEqualTo(1);
         assertThat(relationMapper.countFollowers(aliceId)).isEqualTo(2);
+    }
+
+    @Test
+    void shouldPersistJsonOutboxPayload() {
+        Instant now = Instant.parse("2026-08-24T10:00:00Z");
+        OutboxRecord record = OutboxRecord.builder()
+                .id(9_031L)
+                .aggregateType("following")
+                .aggregateId(9_001L)
+                .type("FollowCreated")
+                .payload("{\"fromUserId\":1,\"toUserId\":2}")
+                .createdAt(now)
+                .build();
+
+        assertThat(outboxMapper.insert(record)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT JSON_EXTRACT(payload, '$.fromUserId') FROM outbox WHERE id = ?",
+                String.class,
+                record.getId()
+        )).isEqualTo("1");
     }
 
     private long insertUser(String nickname) {

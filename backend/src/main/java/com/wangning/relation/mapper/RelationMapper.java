@@ -18,15 +18,31 @@ import java.util.List;
 public interface RelationMapper {
 
     /**
-     * 创建或恢复一条正向关注关系。
+     * 首次创建一条正向关注关系。
      *
-     * <p>重复用户对会恢复为有效关系，并以传入时间刷新排序。MySQL 在重复键更新时
-     * 可能返回 {@code 2}，调用方应以大于 {@code 0} 判断写入是否成功。</p>
+     * <p>若该用户对已经存在，插入会被忽略并返回 {@code 0}。调用方随后可使用
+     * {@link #reactivateFollowing(long, long, Instant, Instant)} 原子恢复已取消关系。</p>
      *
      * @param relation 正向关系，必须包含 ID、发起者、目标用户和时间
      * @return 受影响行数
      */
-    int upsertFollowing(UserRelation relation);
+    int insertFollowingIgnore(UserRelation relation);
+
+    /**
+     * 原子恢复一条已取消的正向关系。
+     *
+     * @param fromUserId 关注发起者用户 ID
+     * @param toUserId 被关注者用户 ID
+     * @param createdAt 最近一次关注时间
+     * @param updatedAt 状态更新时间
+     * @return 原关系已取消并被恢复时返回 {@code 1}，其他情况返回 {@code 0}
+     */
+    int reactivateFollowing(
+            @Param("fromUserId") long fromUserId,
+            @Param("toUserId") long toUserId,
+            @Param("createdAt") Instant createdAt,
+            @Param("updatedAt") Instant updatedAt
+    );
 
     /**
      * 将正向关注关系标记为已取消。
